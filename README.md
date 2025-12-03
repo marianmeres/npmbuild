@@ -21,7 +21,7 @@ const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
 await npmBuild({
 	name: denoJson.name,
 	version: denoJson.version,
-	repository: `@marianmeres/${denoJson.name}`
+	repository: denoJson.name.replace(/^@/, ''), // conventional mm usage
 });
 ```
 
