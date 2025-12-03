@@ -21,9 +21,7 @@ const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
 await npmBuild({
 	name: denoJson.name,
 	version: denoJson.version,
-	repository: "your-username/your-repo", // optional
-	sourceFiles: ["mod.ts"],               // files from srcDir to include
-	rootFiles: ["LICENSE", "README.md"],   // files from project root to include
+	repository: `@marianmeres/${denoJson.name}`
 });
 ```
 
