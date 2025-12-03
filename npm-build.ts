@@ -47,7 +47,14 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		license = "MIT",
 		repository,
 		sourceFiles,
-		rootFiles = ["LICENSE", "README.md", "llm.txt", "CLAUDE.md", "API.md"],
+		rootFiles = [
+			"LICENSE",
+			"README.md",
+			"llm.txt",
+			"CLAUDE.md",
+			"API.md",
+			"AGENTS.md",
+		],
 		dependencies = [],
 		tsconfig: tsconfigOverrides = {},
 	} = options;
