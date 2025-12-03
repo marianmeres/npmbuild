@@ -11,7 +11,7 @@ import { npmBuild } from "jsr:@marianmeres/npmbuild";
 
 ## Usage
 
-Create a build script (e.g., `scripts/build-npm.ts`):
+Create a build script (e.g., `scripts/npm-build.ts`):
 
 ```ts
 import { npmBuild } from "jsr:@marianmeres/npmbuild";
@@ -30,7 +30,7 @@ await npmBuild({
 Run:
 
 ```bash
-deno run -A scripts/build-npm.ts
+deno run -A scripts/npm-build.ts
 ```
 
 Publish:

@@ -47,15 +47,19 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		license = "MIT",
 		repository,
 		sourceFiles = ["mod.ts"],
-		rootFiles = ["LICENSE", "README.md"],
+		rootFiles = ["LICENSE", "README.md", "llm.txt", "CLAUDE.md"],
 		dependencies = [],
 		tsconfig: tsconfigOverrides = {},
 	} = options;
 
 	const outDirSrc = join(outDir, "src");
 
-	console.log(`Building npm package: ${name}@${version}`);
-	console.log({ srcDir, outDir });
+	console.log(
+		`%cBuilding npm package: %c${name}@${version}`,
+		"color: gray",
+		"color: cyan; font-weight: bold"
+	);
+	console.log("%c{ srcDir: %c%s%c, outDir: %c%s%c }", "color: gray", "color: yellow", srcDir, "color: gray", "color: yellow", outDir, "color: gray");
 
 	await emptyDir(outDir);
 
@@ -70,7 +74,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 			Deno.copyFileSync(file, join(outDir, file));
 		} catch (e) {
 			if (e instanceof Deno.errors.NotFound) {
-				console.warn(`Warning: ${file} not found, skipping`);
+				console.warn("%cWarning: %c%s%c not found, skipping", "color: orange", "color: yellow", file, "color: orange");
 			} else {
 				throw e;
 			}
@@ -151,7 +155,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 	try {
 		// install dependencies if any
 		if (dependencies.length > 0) {
-			console.log("--> Executing: npm install", dependencies.join(" "));
+			console.log("%c--> Executing: %cnpm install %s", "color: gray", "color: green", dependencies.join(" "));
 			const npmResult = new Deno.Command("npm", {
 				args: ["install", ...dependencies],
 			}).outputSync();
@@ -159,7 +163,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 				throw new Error(new TextDecoder().decode(npmResult.stderr));
 		}
 
-		console.log("--> Executing: tsc");
+		console.log("%c--> Executing: %ctsc", "color: gray", "color: green");
 		const { code, stderr } = new Deno.Command("tsc", {
 			args: ["-p", "tsconfig.json"],
 		}).outputSync();
@@ -172,5 +176,5 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 	Deno.removeSync(join(outDir, "tsconfig.json"));
 	Deno.removeSync(join(outDir, "src"), { recursive: true });
 
-	console.log("Done!");
+	console.log("%cDone!", "color: green; font-weight: bold");
 }
