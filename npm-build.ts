@@ -198,15 +198,28 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 			const npmResult = new Deno.Command("npm", {
 				args: ["install", ...dependencies],
 			}).outputSync();
-			if (npmResult.code)
-				throw new Error(new TextDecoder().decode(npmResult.stderr));
+			if (npmResult.code) {
+				const decoder = new TextDecoder();
+				const stdout = decoder.decode(npmResult.stdout);
+				const stderr = decoder.decode(npmResult.stderr);
+				throw new Error(
+					`npm install failed (exit code ${npmResult.code}):\n${stdout}\n${stderr}`
+				);
+			}
 		}
 
 		console.log("%c--> Executing: %ctsc", "color: gray", "color: green");
-		const { code, stderr } = new Deno.Command("tsc", {
+		const tscResult = new Deno.Command("tsc", {
 			args: ["-p", "tsconfig.json"],
 		}).outputSync();
-		if (code) throw new Error(new TextDecoder().decode(stderr));
+		if (tscResult.code) {
+			const decoder = new TextDecoder();
+			const stdout = decoder.decode(tscResult.stdout);
+			const stderr = decoder.decode(tscResult.stderr);
+			throw new Error(
+				`tsc failed (exit code ${tscResult.code}):\n${stdout}\n${stderr}`
+			);
+		}
 	} finally {
 		Deno.chdir(cwd);
 	}
