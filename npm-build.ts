@@ -19,7 +19,7 @@ export interface NpmBuildOptions {
 	license?: string;
 	/** GitHub repository name, e.g. "marianmeres/name" (optional, for repo/bugs URLs) */
 	repository?: string;
-	/** Source files to copy (default: ["mod.ts"]) */
+	/** Source files to copy (default: all files from srcDir) */
 	sourceFiles?: string[];
 	/** Root files to copy to package (default: ["LICENSE", "README.md"]) */
 	rootFiles?: string[];
@@ -46,7 +46,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		author = "Marian Meres",
 		license = "MIT",
 		repository,
-		sourceFiles = ["mod.ts"],
+		sourceFiles,
 		rootFiles = ["LICENSE", "README.md", "llm.txt", "CLAUDE.md"],
 		dependencies = [],
 		tsconfig: tsconfigOverrides = {},
@@ -63,9 +63,21 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 
 	await emptyDir(outDir);
 
-	// copy source files
-	for (const file of sourceFiles) {
-		Deno.copyFileSync(join(srcDir, file), join(outDirSrc, file));
+	// copy source files (all files from srcDir by default, or explicit list if provided)
+	if (sourceFiles) {
+		for (const file of sourceFiles) {
+			Deno.copyFileSync(join(srcDir, file), join(outDirSrc, file));
+		}
+	} else {
+		for (const entry of walkSync(srcDir)) {
+			if (entry.isFile) {
+				const relativePath = entry.path.slice(srcDir.length + 1);
+				const destPath = join(outDirSrc, relativePath);
+				const destDir = destPath.slice(0, destPath.lastIndexOf("/"));
+				Deno.mkdirSync(destDir, { recursive: true });
+				Deno.copyFileSync(entry.path, destPath);
+			}
+		}
 	}
 
 	// copy root files (skip missing)
