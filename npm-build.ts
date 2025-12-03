@@ -47,7 +47,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		license = "MIT",
 		repository,
 		sourceFiles,
-		rootFiles = ["LICENSE", "README.md", "llm.txt", "CLAUDE.md"],
+		rootFiles = ["LICENSE", "README.md", "llm.txt", "CLAUDE.md", "API.md"],
 		dependencies = [],
 		tsconfig: tsconfigOverrides = {},
 	} = options;
@@ -59,7 +59,16 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		"color: gray",
 		"color: cyan; font-weight: bold"
 	);
-	console.log("%c{ srcDir: %c%s%c, outDir: %c%s%c }", "color: gray", "color: yellow", srcDir, "color: gray", "color: yellow", outDir, "color: gray");
+	console.log(
+		"%c{ srcDir: %c%s%c, outDir: %c%s%c }",
+		"color: gray",
+		"color: yellow",
+		srcDir,
+		"color: gray",
+		"color: yellow",
+		outDir,
+		"color: gray"
+	);
 
 	await emptyDir(outDir);
 
@@ -86,7 +95,13 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 			Deno.copyFileSync(file, join(outDir, file));
 		} catch (e) {
 			if (e instanceof Deno.errors.NotFound) {
-				console.warn("%cWarning: %c%s%c not found, skipping", "color: orange", "color: yellow", file, "color: orange");
+				console.warn(
+					"%cWarning: %c%s%c not found, skipping",
+					"color: orange",
+					"color: yellow",
+					file,
+					"color: orange"
+				);
 			} else {
 				throw e;
 			}
@@ -167,7 +182,12 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 	try {
 		// install dependencies if any
 		if (dependencies.length > 0) {
-			console.log("%c--> Executing: %cnpm install %s", "color: gray", "color: green", dependencies.join(" "));
+			console.log(
+				"%c--> Executing: %cnpm install %s",
+				"color: gray",
+				"color: green",
+				dependencies.join(" ")
+			);
 			const npmResult = new Deno.Command("npm", {
 				args: ["install", ...dependencies],
 			}).outputSync();
