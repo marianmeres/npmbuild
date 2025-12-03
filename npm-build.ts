@@ -103,7 +103,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		} catch (e) {
 			if (e instanceof Deno.errors.NotFound) {
 				console.warn(
-					"%cWarning: %c%s%c not found, skipping",
+					"%c    --> %c%s%c not found, skipping",
 					"color: orange",
 					"color: yellow",
 					file,
