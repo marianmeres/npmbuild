@@ -52,3 +52,9 @@ cd .npm-dist && npm publish
 | `rootFiles` | `["LICENSE", "README.md"]` | Root files to copy to package |
 | `dependencies` | `[]` | npm dependencies to install during build |
 | `tsconfig` | `{}` | Additional tsconfig compilerOptions overrides |
+
+## Example
+
+```bash
+cd example && deno run -A build.ts
+```
