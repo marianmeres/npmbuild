@@ -48,8 +48,8 @@ cd .npm-dist && npm publish
 | `author` | `"Marian Meres"` | Package author |
 | `license` | `"MIT"` | Package license |
 | `repository` | - | GitHub repo (e.g., `"user/repo"`) for package.json URLs |
-| `sourceFiles` | `["mod.ts"]` | Source files to copy from srcDir |
-| `rootFiles` | `["LICENSE", "README.md"]` | Root files to copy to package |
+| `sourceFiles` | all files from srcDir | Source files to copy from srcDir |
+| `rootFiles` | `["LICENSE", "README.md", "llm.txt", "CLAUDE.md", "API.md"]` | Root files to copy to package (missing files are skipped) |
 | `dependencies` | `[]` | npm dependencies to install during build |
 | `tsconfig` | `{}` | Additional tsconfig compilerOptions overrides |
 
