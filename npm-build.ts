@@ -75,12 +75,14 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 	// copy source files (all files from srcDir by default, or explicit list if provided)
 	if (sourceFiles) {
 		for (const file of sourceFiles) {
+			console.log("%c    copying %s", "color: gray", file);
 			Deno.copyFileSync(join(srcDir, file), join(outDirSrc, file));
 		}
 	} else {
 		for (const entry of walkSync(srcDir)) {
 			if (entry.isFile) {
 				const relativePath = entry.path.slice(srcDir.length + 1);
+				console.log("%c    copying %s", "color: gray", relativePath);
 				const destPath = join(outDirSrc, relativePath);
 				const destDir = destPath.slice(0, destPath.lastIndexOf("/"));
 				Deno.mkdirSync(destDir, { recursive: true });
