@@ -122,6 +122,12 @@ Regex pattern:
   "type": "module",
   "main": "dist/mod.js",
   "types": "dist/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.js"
+    }
+  },
   "author": "<options.author>",
   "license": "<options.license>",
   "dependencies": {},
