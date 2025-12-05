@@ -163,6 +163,12 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		type: "module",
 		main: "dist/mod.js",
 		types: "dist/mod.d.ts",
+		exports: {
+			".": {
+				types: "./dist/mod.d.ts",
+				import: "./dist/mod.js",
+			},
+		},
 		author,
 		license,
 		dependencies: {},
