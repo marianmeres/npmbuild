@@ -1,6 +1,6 @@
 {
 	"name": "@marianmeres/npmbuild",
-	"version": "1.7.0",
+	"version": "1.7.1",
 	"exports": "./npm-build.ts",
 	"tasks": {
 		"release": "deno run -A jsr:@marianmeres/deno-release"
