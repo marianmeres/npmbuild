@@ -1,7 +1,6 @@
 # @marianmeres/npmbuild
 
-A quick-and-dirty DRY script for internal needs. Builds an npm-publishable package
-from Deno TypeScript source.
+A minimal Deno-to-npm build tool for pure TypeScript packages. A lightweight alternative to dnt.
 
 ## Installation
 
