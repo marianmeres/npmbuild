@@ -53,6 +53,19 @@ cd .npm-dist && npm publish
 | `dependencies` | `[]` | npm dependencies to install during build |
 | `tsconfig` | `{}` | Additional tsconfig compilerOptions overrides |
 
+## Why not dnt?
+
+Deno's official [dnt](https://github.com/denoland/dnt) is a powerful tool, but it's designed for a different use case. It handles remote dependencies, generates CommonJS alongside ESM, provides shims for `Deno.*` APIs, and runs tests through Node.js.
+
+This package takes the opposite approach: simplicity over features.
+
+- **No `Deno.*` APIs** - The packages I publish to npm are pure TypeScript with no Deno-specific code, so I don't need shims or polyfills.
+- **ESM only** - Modern Node.js (14+) supports ESM natively. CommonJS output is unnecessary overhead.
+- **Local files only** - I don't use remote imports in code destined for npm. A simple file copy and import rewrite is sufficient.
+- **~100 lines of code** - Easy to understand, debug, and modify. No abstraction layers, no magic.
+
+If you need dnt's features, use dnt. If you just want to run `tsc` on some local TypeScript files and produce a publishable npm package, this might be enough.
+
 ## Example
 
 ```bash
