@@ -65,8 +65,3 @@ This package takes the opposite approach: simplicity over features.
 
 If you need dnt's features, use dnt. If you just want to run `tsc` on some local TypeScript files and produce a publishable npm package, this might be enough.
 
-## Example
-
-```bash
-cd example && deno run -A build.ts
-```
