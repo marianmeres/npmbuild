@@ -1,5 +1,7 @@
 # @marianmeres/npmbuild
 
+[![JSR](https://jsr.io/badges/@marianmeres/npmbuild)](https://jsr.io/@marianmeres/npmbuild)
+
 A minimal Deno-to-npm build tool for pure TypeScript packages. A lightweight alternative to dnt.
 
 ## Installation
