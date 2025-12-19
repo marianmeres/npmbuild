@@ -63,6 +63,8 @@ interface NpmBuildOptions {
   rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md"]
   dependencies?: string[];             // npm dependencies to install
   tsconfig?: Record<string, unknown>;  // TypeScript compiler overrides
+  entryPoints?: string[];              // default: ["mod"] - entry point names (without extension)
+  packageJsonOverrides?: Record<string, unknown>;  // deep merged with generated package.json
 }
 ```
 
@@ -115,6 +117,8 @@ Regex pattern:
 
 ## Generated package.json
 
+Generated dynamically based on `entryPoints` (default: `["mod"]`). With `entryPoints: ["mod", "utils"]`:
+
 ```json
 {
   "name": "<options.name>",
@@ -126,20 +130,19 @@ Regex pattern:
     ".": {
       "types": "./dist/mod.d.ts",
       "import": "./dist/mod.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js"
     }
   },
   "author": "<options.author>",
   "license": "<options.license>",
-  "dependencies": {},
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/<repository>.git"
-  },
-  "bugs": {
-    "url": "https://github.com/<repository>/issues"
-  }
+  "dependencies": {}
 }
 ```
+
+The `packageJsonOverrides` option is deep-merged with the generated object, allowing additional fields or export customizations.
 
 ## Dependencies
 
@@ -148,6 +151,7 @@ Regex pattern:
 | Import | Version | Purpose |
 |--------|---------|---------|
 | `@std/assert` | ^1.0.16 | Testing utilities |
+| `@std/collections` | ^1.0.10 | Deep merge utility |
 | `@std/fs` | ^1.0.20 | File system operations (emptyDir, walkSync) |
 | `@std/path` | ^1.1.3 | Path utilities (join) |
 
@@ -166,6 +170,10 @@ await npmBuild({
   version: "1.0.0",
   repository: "example/my-package",
   dependencies: ["lodash"],
+  entryPoints: ["mod", "utils"],  // exposes "." and "./utils"
+  packageJsonOverrides: {
+    keywords: ["typescript", "utility"],
+  },
 });
 ```
 
@@ -181,6 +189,8 @@ After build, `.npm-dist/` contains:
 └── dist/
     ├── mod.js
     ├── mod.d.ts
+    ├── utils.js        # if entryPoints includes "utils"
+    ├── utils.d.ts
     └── [compiled files...]
 ```
 
@@ -240,7 +250,7 @@ cd .npm-dist && npm publish
 
 ## Constraints & Limitations
 
-- Entry point must be `src/mod.ts` (compiles to `dist/mod.js`)
+- Entry points must exist in `src/` directory (e.g., `src/mod.ts`, `src/utils.ts`)
 - Only handles TypeScript source files
 - Requires `npm` and `tsc` in PATH
 - No bundling (outputs individual files)

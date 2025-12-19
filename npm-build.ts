@@ -1,3 +1,4 @@
+import { deepMerge } from "@std/collections/deep-merge";
 import { emptyDir, walkSync } from "@std/fs";
 import { join } from "@std/path";
 
@@ -27,6 +28,13 @@ export interface NpmBuildOptions {
 	dependencies?: string[];
 	/** Additional tsconfig compilerOptions overrides */
 	tsconfig?: Record<string, unknown>;
+	/** Entry point names without extension (default: ["mod"])
+	 *  Each entry expects a corresponding src/{name}.ts file
+	 *  and generates exports for "./{name}" (or "." for "mod")
+	 */
+	entryPoints?: string[];
+	/** Arbitrary package.json overrides (deep merged with generated values) */
+	packageJsonOverrides?: Record<string, unknown>;
 }
 
 /**
@@ -50,6 +58,8 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		rootFiles = ["LICENSE", "README.md", "API.md", "AGENTS.md"],
 		dependencies = [],
 		tsconfig: tsconfigOverrides = {},
+		entryPoints = ["mod"],
+		packageJsonOverrides = {},
 	} = options;
 
 	const outDirSrc = join(outDir, "src");
@@ -156,23 +166,31 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		JSON.stringify(tsconfigJson, null, "\t")
 	);
 
-	// create package.json
-	const packageJson: Record<string, unknown> = {
-		name,
-		version,
-		type: "module",
-		main: "dist/mod.js",
-		types: "dist/mod.d.ts",
-		exports: {
-			".": {
-				types: "./dist/mod.d.ts",
-				import: "./dist/mod.js",
-			},
+	// create package.json with dynamic exports from entryPoints
+	const exportsMap: Record<string, { types: string; import: string }> = {};
+	for (const entry of entryPoints) {
+		const key = entry === "mod" ? "." : `./${entry}`;
+		exportsMap[key] = {
+			types: `./dist/${entry}.d.ts`,
+			import: `./dist/${entry}.js`,
+		};
+	}
+
+	const mainEntry = entryPoints[0];
+	const packageJson: Record<string, unknown> = deepMerge(
+		{
+			name,
+			version,
+			type: "module",
+			main: `dist/${mainEntry}.js`,
+			types: `dist/${mainEntry}.d.ts`,
+			exports: exportsMap,
+			author,
+			license,
+			dependencies: {},
 		},
-		author,
-		license,
-		dependencies: {},
-	};
+		packageJsonOverrides
+	);
 
 	if (repository) {
 		packageJson.repository = {

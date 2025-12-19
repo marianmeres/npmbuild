@@ -51,6 +51,8 @@ cd .npm-dist && npm publish
 | `rootFiles` | `["LICENSE", "README.md", "llm.txt", "CLAUDE.md", "API.md"]` | Root files to copy to package (missing files are skipped) |
 | `dependencies` | `[]` | npm dependencies to install during build |
 | `tsconfig` | `{}` | Additional tsconfig compilerOptions overrides |
+| `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. |
+| `packageJsonOverrides` | `{}` | Arbitrary package.json fields (deep merged) |
 
 ## Why not dnt?
 
@@ -64,6 +66,47 @@ This package takes the opposite approach: simplicity over features.
 - **~100 lines of code** - Easy to understand, debug, and modify. No abstraction layers, no magic.
 
 If you need dnt's features, use dnt. If you just want to run `tsc` on some local TypeScript files and produce a publishable npm package, this might be enough.
+
+## Multiple Entry Points
+
+By default, only `src/mod.ts` is exposed as the package entry point. To expose multiple entry points:
+
+```ts
+await npmBuild({
+	name: "@example/my-package",
+	version: "1.0.0",
+	entryPoints: ["mod", "utils", "helpers"],
+});
+```
+
+This expects `src/mod.ts`, `src/utils.ts`, and `src/helpers.ts` to exist, and generates:
+
+```json
+{
+	"main": "dist/mod.js",
+	"types": "dist/mod.d.ts",
+	"exports": {
+		".": { "types": "./dist/mod.d.ts", "import": "./dist/mod.js" },
+		"./utils": { "types": "./dist/utils.d.ts", "import": "./dist/utils.js" },
+		"./helpers": { "types": "./dist/helpers.d.ts", "import": "./dist/helpers.js" }
+	}
+}
+```
+
+Use `packageJsonOverrides` to add additional fields or merge extra exports:
+
+```ts
+await npmBuild({
+	name: "@example/my-package",
+	version: "1.0.0",
+	packageJsonOverrides: {
+		keywords: ["typescript", "utility"],
+		exports: {
+			"./package.json": "./package.json"
+		}
+	}
+});
+```
 
 ## Example
 
