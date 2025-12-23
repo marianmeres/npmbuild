@@ -50,9 +50,9 @@ cd .npm-dist && npm publish
 | `license` | `"MIT"` | Package license |
 | `repository` | - | GitHub repo (e.g., `"user/repo"`) for package.json URLs |
 | `sourceFiles` | all files from srcDir | Source files to copy from srcDir |
-| `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
+| `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
 | `dependencies` | `[]` | npm dependencies to install during build |
-| `tsconfig` | `{}` | Additional tsconfig compilerOptions overrides |
+| `tsconfig` | `{}` | tsconfig overrides (deep merged), e.g. `{ compilerOptions: { strict: true } }` |
 | `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. |
 | `packageJsonOverrides` | `{}` | Arbitrary package.json fields (deep merged) |
 

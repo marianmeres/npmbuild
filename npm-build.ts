@@ -34,11 +34,11 @@ export interface NpmBuildOptions {
 	repository?: string;
 	/** Source files to copy (default: all files from srcDir) */
 	sourceFiles?: string[];
-	/** Root files or directories to copy to package (default: ["LICENSE", "README.md", "API.md", "AGENTS.md"]) */
+	/** Root files or directories to copy to package (default: ["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"]) */
 	rootFiles?: string[];
 	/** npm dependencies to install (default: none) */
 	dependencies?: string[];
-	/** Additional tsconfig compilerOptions overrides */
+	/** tsconfig overrides (deep merged), e.g. { compilerOptions: { strict: true }, include: [...] } */
 	tsconfig?: Record<string, unknown>;
 	/** Entry point names without extension (default: ["mod"])
 	 *  Each entry expects a corresponding src/{name}.ts file
@@ -159,20 +159,23 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 	}
 
 	// create tsconfig.json
-	const tsconfigJson = {
-		compilerOptions: {
-			target: "esnext",
-			module: "esnext",
-			strict: false,
-			declaration: true,
-			forceConsistentCasingInFileNames: true,
-			skipLibCheck: true,
-			rootDir: "src",
-			outDir: "dist",
-			moduleResolution: "bundler",
-			...tsconfigOverrides,
+	const tsconfigJson = deepMerge(
+		{
+			compilerOptions: {
+				target: "esnext",
+				module: "esnext",
+				strict: false,
+				declaration: true,
+				forceConsistentCasingInFileNames: true,
+				skipLibCheck: true,
+				rootDir: "src",
+				outDir: "dist",
+				moduleResolution: "bundler",
+			},
+			include: ["src/**/*"],
 		},
-	};
+		tsconfigOverrides
+	);
 	Deno.writeTextFileSync(
 		join(outDir, "tsconfig.json"),
 		JSON.stringify(tsconfigJson, null, "\t")

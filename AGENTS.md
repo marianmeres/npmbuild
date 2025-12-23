@@ -60,9 +60,9 @@ interface NpmBuildOptions {
   license?: string;                    // default: "MIT"
   repository?: string;                 // GitHub format: "user/repo"
   sourceFiles?: string[];              // specific files to include
-  rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md"] - supports directories (copied recursively)
+  rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"] - supports directories (copied recursively)
   dependencies?: string[];             // npm dependencies to install
-  tsconfig?: Record<string, unknown>;  // TypeScript compiler overrides
+  tsconfig?: Record<string, unknown>;  // tsconfig overrides (deep merged) - compilerOptions, include, exclude, etc.
   entryPoints?: string[];              // default: ["mod"] - entry point names (without extension)
   packageJsonOverrides?: Record<string, unknown>;  // deep merged with generated package.json
 }
@@ -111,7 +111,8 @@ Regex pattern:
     "rootDir": "src",
     "outDir": "dist",
     "moduleResolution": "bundler"
-  }
+  },
+  "include": ["src/**/*"]
 }
 ```
 
