@@ -60,7 +60,7 @@ interface NpmBuildOptions {
   license?: string;                    // default: "MIT"
   repository?: string;                 // GitHub format: "user/repo"
   sourceFiles?: string[];              // specific files to include
-  rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md"]
+  rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md"] - supports directories (copied recursively)
   dependencies?: string[];             // npm dependencies to install
   tsconfig?: Record<string, unknown>;  // TypeScript compiler overrides
   entryPoints?: string[];              // default: ["mod"] - entry point names (without extension)
@@ -74,7 +74,7 @@ interface NpmBuildOptions {
 1. Validate options & set defaults
 2. Empty output directory
 3. Copy source files (srcDir → outDir/src)
-4. Copy root files (LICENSE, README.md, etc.)
+4. Copy root files and directories (LICENSE, README.md, docs/, etc.)
 5. Rewrite imports (.ts → .js in all TS files)
 6. Generate tsconfig.json
 7. Generate package.json
@@ -186,6 +186,8 @@ After build, `.npm-dist/` contains:
 ├── package.json
 ├── LICENSE
 ├── README.md
+├── docs/               # if rootFiles includes "docs" (copied recursively)
+│   └── [files...]
 └── dist/
     ├── mod.js
     ├── mod.d.ts
@@ -206,7 +208,7 @@ After build, `.npm-dist/` contains:
 
 ## Error Handling
 
-- Missing root files: Warning logged, build continues
+- Missing root files/directories: Warning logged, build continues
 - npm install failure: Error thrown with output
 - tsc failure: Error thrown with output
 - Working directory: Restored on failure
@@ -217,17 +219,19 @@ After build, `.npm-dist/` contains:
 2. **No test files**: Tool is tested via example directory
 3. **Async/await**: All operations are async
 4. **Console styling**: Uses CSS-like console styling for output
-5. **Graceful degradation**: Missing optional files don't fail build
+5. **Graceful degradation**: Missing optional files/directories don't fail build
+6. **Recursive directory copying**: `copyRecursive()` helper handles both files and directories
 
 ## Common Modification Points
 
 | Task | Location |
 |------|----------|
 | Change default options | `npm-build.ts` - destructuring defaults |
-| Add new root files | `npm-build.ts` - `rootFiles` default array |
+| Add new root files/dirs | `npm-build.ts` - `rootFiles` default array |
 | Modify tsconfig | `npm-build.ts` - `tsconfig` object literal |
 | Change package.json template | `npm-build.ts` - `packageJson` object literal |
 | Adjust import regex | `npm-build.ts` - regex in file processing loop |
+| Modify directory copying | `npm-build.ts` - `copyRecursive()` function |
 
 ## Version History
 

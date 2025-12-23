@@ -3,7 +3,9 @@
 	"version": "1.8.0",
 	"exports": "./npm-build.ts",
 	"tasks": {
-		"release": "deno run -A jsr:@marianmeres/deno-release"
+		"release": "deno run -A jsr:@marianmeres/deno-release",
+		"rp": "deno task release -y && deno publish",
+		"rpm": "deno task release -y minor && deno publish"
 	},
 	"imports": {
 		"@std/assert": "jsr:@std/assert@^1.0.16",

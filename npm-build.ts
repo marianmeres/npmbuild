@@ -2,6 +2,18 @@ import { deepMerge } from "@std/collections/deep-merge";
 import { emptyDir, walkSync } from "@std/fs";
 import { join } from "@std/path";
 
+function copyRecursive(src: string, dest: string): void {
+	const stat = Deno.statSync(src);
+	if (stat.isDirectory) {
+		Deno.mkdirSync(dest, { recursive: true });
+		for (const entry of Deno.readDirSync(src)) {
+			copyRecursive(join(src, entry.name), join(dest, entry.name));
+		}
+	} else {
+		Deno.copyFileSync(src, dest);
+	}
+}
+
 /**
  * Configuration for building an npm package from Deno source
  */
@@ -22,7 +34,7 @@ export interface NpmBuildOptions {
 	repository?: string;
 	/** Source files to copy (default: all files from srcDir) */
 	sourceFiles?: string[];
-	/** Root files to copy to package (default: ["LICENSE", "README.md"]) */
+	/** Root files or directories to copy to package (default: ["LICENSE", "README.md", "API.md", "AGENTS.md"]) */
 	rootFiles?: string[];
 	/** npm dependencies to install (default: none) */
 	dependencies?: string[];
@@ -55,7 +67,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		license = "MIT",
 		repository,
 		sourceFiles,
-		rootFiles = ["LICENSE", "README.md", "API.md", "AGENTS.md"],
+		rootFiles = ["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"],
 		dependencies = [],
 		tsconfig: tsconfigOverrides = {},
 		entryPoints = ["mod"],
@@ -106,17 +118,17 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		}
 	}
 
-	// copy root files (skip missing)
-	for (const file of rootFiles) {
+	// copy root files and directories (skip missing)
+	for (const asset of rootFiles) {
 		try {
-			Deno.copyFileSync(file, join(outDir, file));
+			copyRecursive(asset, join(outDir, asset));
 		} catch (e) {
 			if (e instanceof Deno.errors.NotFound) {
 				console.warn(
 					"%c    --> %c%s%c not found, skipping",
 					"color: orange",
 					"color: yellow",
-					file,
+					asset,
 					"color: orange"
 				);
 			} else {

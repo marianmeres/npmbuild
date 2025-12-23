@@ -50,7 +50,7 @@ cd .npm-dist && npm publish
 | `license` | `"MIT"` | Package license |
 | `repository` | - | GitHub repo (e.g., `"user/repo"`) for package.json URLs |
 | `sourceFiles` | all files from srcDir | Source files to copy from srcDir |
-| `rootFiles` | `["LICENSE", "README.md", "llm.txt", "CLAUDE.md", "API.md"]` | Root files to copy to package (missing files are skipped) |
+| `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
 | `dependencies` | `[]` | npm dependencies to install during build |
 | `tsconfig` | `{}` | Additional tsconfig compilerOptions overrides |
 | `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. |
@@ -68,6 +68,20 @@ This package takes the opposite approach: simplicity over features.
 - **~100 lines of code** - Easy to understand, debug, and modify. No abstraction layers, no magic.
 
 If you need dnt's features, use dnt. If you just want to run `tsc` on some local TypeScript files and produce a publishable npm package, this might be enough.
+
+## Copying Additional Directories
+
+The `rootFiles` option supports both files and directories. Directories are copied recursively:
+
+```ts
+await npmBuild({
+	name: "@example/my-package",
+	version: "1.0.0",
+	rootFiles: ["LICENSE", "README.md", "docs", "examples"],
+});
+```
+
+This will copy the `docs/` and `examples/` directories (with all their contents) to the npm package root. When users install your package, these directories will be available under `node_modules/your-package/docs/`, etc.
 
 ## Multiple Entry Points
 
