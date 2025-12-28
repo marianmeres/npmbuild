@@ -38,6 +38,8 @@ export interface NpmBuildOptions {
 	rootFiles?: string[];
 	/** npm dependencies to install (default: none) */
 	dependencies?: string[];
+	/** JSR dependencies to install via 'npx jsr add' (default: none) */
+	jsrDependencies?: string[];
 	/** tsconfig overrides (deep merged), e.g. { compilerOptions: { strict: true }, include: [...] } */
 	tsconfig?: Record<string, unknown>;
 	/** Entry point names without extension (default: ["mod"])
@@ -69,6 +71,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		sourceFiles,
 		rootFiles = ["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"],
 		dependencies = [],
+		jsrDependencies = [],
 		tsconfig: tsconfigOverrides = {},
 		entryPoints = ["mod"],
 		packageJsonOverrides = {},
@@ -243,6 +246,27 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 				const stderr = decoder.decode(npmResult.stderr);
 				throw new Error(
 					`npm install failed (exit code ${npmResult.code}):\n${stdout}\n${stderr}`
+				);
+			}
+		}
+
+		// install JSR dependencies if any
+		if (jsrDependencies.length > 0) {
+			console.log(
+				"%c--> Executing: %cnpx jsr add %s",
+				"color: gray",
+				"color: green",
+				jsrDependencies.join(" ")
+			);
+			const jsrResult = new Deno.Command("npx", {
+				args: ["jsr", "add", ...jsrDependencies],
+			}).outputSync();
+			if (jsrResult.code) {
+				const decoder = new TextDecoder();
+				const stdout = decoder.decode(jsrResult.stdout);
+				const stderr = decoder.decode(jsrResult.stderr);
+				throw new Error(
+					`npx jsr add failed (exit code ${jsrResult.code}):\n${stdout}\n${stderr}`
 				);
 			}
 		}

@@ -52,6 +52,7 @@ cd .npm-dist && npm publish
 | `sourceFiles` | all files from srcDir | Source files to copy from srcDir |
 | `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
 | `dependencies` | `[]` | npm dependencies to install during build |
+| `jsrDependencies` | `[]` | JSR dependencies to install via `npx jsr add` during build |
 | `tsconfig` | `{}` | tsconfig overrides (deep merged), e.g. `{ compilerOptions: { strict: true } }` |
 | `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. |
 | `packageJsonOverrides` | `{}` | Arbitrary package.json fields (deep merged) |
