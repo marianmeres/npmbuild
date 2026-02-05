@@ -69,7 +69,14 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		license = "MIT",
 		repository,
 		sourceFiles,
-		rootFiles = ["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"],
+		rootFiles = [
+			"LICENSE",
+			"README.md",
+			"API.md",
+			"AGENTS.md",
+			"CLAUDE.md",
+			"docs",
+		],
 		dependencies = [],
 		jsrDependencies = [],
 		tsconfig: tsconfigOverrides = {},
@@ -82,7 +89,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 	console.log(
 		`%cBuilding npm package: %c${name}@${version}`,
 		"color: gray",
-		"color: cyan; font-weight: bold"
+		"color: cyan; font-weight: bold",
 	);
 	console.log(
 		"%c{ srcDir: %c%s%c, outDir: %c%s%c }",
@@ -92,7 +99,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 		"color: gray",
 		"color: yellow",
 		outDir,
-		"color: gray"
+		"color: gray",
 	);
 
 	await emptyDir(outDir);
@@ -111,7 +118,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 					"%c    --> %c%s",
 					"color: gray",
 					"color: green",
-					relativePath
+					relativePath,
 				);
 				const destPath = join(outDirSrc, relativePath);
 				const destDir = destPath.slice(0, destPath.lastIndexOf("/"));
@@ -132,7 +139,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 					"color: orange",
 					"color: yellow",
 					asset,
-					"color: orange"
+					"color: orange",
 				);
 			} else {
 				throw e;
@@ -155,7 +162,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 					} else {
 						return `import(${q4}${path2}.js${q6})`;
 					}
-				}
+				},
 			);
 			Deno.writeTextFileSync(f.path, replaced);
 		}
@@ -177,11 +184,11 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 			},
 			include: ["src/**/*"],
 		},
-		tsconfigOverrides
+		tsconfigOverrides,
 	);
 	Deno.writeTextFileSync(
 		join(outDir, "tsconfig.json"),
-		JSON.stringify(tsconfigJson, null, "\t")
+		JSON.stringify(tsconfigJson, null, "\t"),
 	);
 
 	// create package.json with dynamic exports from entryPoints
@@ -207,7 +214,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 			license,
 			dependencies: {},
 		},
-		packageJsonOverrides
+		packageJsonOverrides,
 	);
 
 	if (repository) {
@@ -222,7 +229,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 
 	Deno.writeTextFileSync(
 		join(outDir, "package.json"),
-		JSON.stringify(packageJson, null, "\t")
+		JSON.stringify(packageJson, null, "\t"),
 	);
 
 	// compile
@@ -235,7 +242,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 				"%c--> Executing: %cnpm install %s",
 				"color: gray",
 				"color: green",
-				dependencies.join(" ")
+				dependencies.join(" "),
 			);
 			const npmResult = new Deno.Command("npm", {
 				args: ["install", ...dependencies],
@@ -245,7 +252,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 				const stdout = decoder.decode(npmResult.stdout);
 				const stderr = decoder.decode(npmResult.stderr);
 				throw new Error(
-					`npm install failed (exit code ${npmResult.code}):\n${stdout}\n${stderr}`
+					`npm install failed (exit code ${npmResult.code}):\n${stdout}\n${stderr}`,
 				);
 			}
 		}
@@ -256,7 +263,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 				"%c--> Executing: %cnpx jsr add %s",
 				"color: gray",
 				"color: green",
-				jsrDependencies.join(" ")
+				jsrDependencies.join(" "),
 			);
 			const jsrResult = new Deno.Command("npx", {
 				args: ["jsr", "add", ...jsrDependencies],
@@ -266,7 +273,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 				const stdout = decoder.decode(jsrResult.stdout);
 				const stderr = decoder.decode(jsrResult.stderr);
 				throw new Error(
-					`npx jsr add failed (exit code ${jsrResult.code}):\n${stdout}\n${stderr}`
+					`npx jsr add failed (exit code ${jsrResult.code}):\n${stdout}\n${stderr}`,
 				);
 			}
 		}
@@ -280,7 +287,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<void> {
 			const stdout = decoder.decode(tscResult.stdout);
 			const stderr = decoder.decode(tscResult.stderr);
 			throw new Error(
-				`tsc failed (exit code ${tscResult.code}):\n${stdout}\n${stderr}`
+				`tsc failed (exit code ${tscResult.code}):\n${stdout}\n${stderr}`,
 			);
 		}
 	} finally {
