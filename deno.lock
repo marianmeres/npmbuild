@@ -1,24 +1,24 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@std/assert@^1.0.16": "1.0.16",
-    "jsr:@std/collections@^1.1.3": "1.1.3",
-    "jsr:@std/fs@^1.0.21": "1.0.21",
+    "jsr:@std/assert@^1.0.18": "1.0.18",
+    "jsr:@std/collections@^1.1.5": "1.1.5",
+    "jsr:@std/fs@^1.0.22": "1.0.22",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/path@^1.1.4": "1.1.4"
   },
   "jsr": {
-    "@std/assert@1.0.16": {
-      "integrity": "6a7272ed1eaa77defe76e5ff63ca705d9c495077e2d5fd0126d2b53fc5bd6532",
+    "@std/assert@1.0.18": {
+      "integrity": "270245e9c2c13b446286de475131dc688ca9abcd94fc5db41d43a219b34d1c78",
       "dependencies": [
         "jsr:@std/internal"
       ]
     },
-    "@std/collections@1.1.3": {
-      "integrity": "bf8b0818886df6a32b64c7d3b037a425111f28278d69fd0995aeb62777c986b0"
+    "@std/collections@1.1.5": {
+      "integrity": "c37cc6bbbbf90fec3e782535a46c9c8a3210f19118c61add71fcea86b0ffd491"
     },
-    "@std/fs@1.0.21": {
-      "integrity": "d720fe1056d78d43065a4d6e0eeb2b19f34adb8a0bc7caf3a4dbf1d4178252cd",
+    "@std/fs@1.0.22": {
+      "integrity": "de0f277a58a867147a8a01bc1b181d0dfa80bfddba8c9cf2bacd6747bcec9308",
       "dependencies": [
         "jsr:@std/internal",
         "jsr:@std/path"
@@ -36,9 +36,9 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/assert@^1.0.16",
-      "jsr:@std/collections@^1.1.3",
-      "jsr:@std/fs@^1.0.21",
+      "jsr:@std/assert@^1.0.18",
+      "jsr:@std/collections@^1.1.5",
+      "jsr:@std/fs@^1.0.22",
       "jsr:@std/path@^1.1.4"
     ]
   }
