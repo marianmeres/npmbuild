@@ -1,0 +1,1 @@
+Deno build tool that converts Deno TypeScript projects into npm-publishable packages, handling import rewriting, TypeScript compilation, declaration generation, and package.json creation.
