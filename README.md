@@ -49,13 +49,17 @@ cd .npm-dist && npm publish
 | `author` | `"Marian Meres"` | Package author |
 | `license` | `"MIT"` | Package license |
 | `repository` | - | GitHub repo (e.g., `"user/repo"`) for package.json URLs |
-| `sourceFiles` | all files from srcDir | Source files to copy from srcDir |
-| `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md", "docs"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
-| `dependencies` | `[]` | npm dependencies to install during build |
+| `sourceFiles` | all files from srcDir | Source files to copy from srcDir (nested paths supported) |
+| `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md", "CLAUDE.md", "docs"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
+| `dependencies` | `[]` | npm dependencies. `string[]` installs via `npm install` and pins to caret range. `Record<string, string>` declares verbatim without installing. |
 | `jsrDependencies` | `[]` | JSR dependencies to install via `npx jsr add` during build |
 | `tsconfig` | `{}` | tsconfig overrides (deep merged), e.g. `{ compilerOptions: { strict: true } }` |
-| `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. |
+| `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. Must be non-empty. |
 | `packageJsonOverrides` | `{}` | Arbitrary package.json fields (deep merged) |
+| `quiet` | `false` | Suppress decorative console output. Auto-stripped when `NO_COLOR` env var is set. |
+| `includeHidden` | `false` | Include dotfiles (e.g. `.DS_Store`, `.gitkeep`) when copying `srcDir` |
+
+`npmBuild(...)` returns a `Promise<NpmBuildResult>` with `{ outDir, entryPoints, packageJson }` — useful for post-build steps (e.g. `npm pack --dry-run` to verify the published file list).
 
 ## Why not dnt?
 
@@ -125,8 +129,70 @@ await npmBuild({
 });
 ```
 
+## Non-TypeScript Assets
+
+Files in `srcDir` that aren't TypeScript (`.json`, `.css`, `.sql`, `.svg`, etc.) are
+passed through to `dist/` after compilation, so imports like
+
+```ts
+import data from "./data.json" with { type: "json" };
+```
+
+continue to work in the published package. Dotfiles (names starting with `.`) are
+excluded by default; opt in with `includeHidden: true`.
+
+## Declaring vs. Installing Dependencies
+
+```ts
+// string[] — runs `npm install <dep>` during build; writes caret ranges of
+// the installed versions into package.json. Creates node_modules/ in outDir.
+dependencies: ["react", "@marianmeres/clog"],
+
+// Record<string, string> — declared verbatim in package.json; no install
+// performed, no node_modules/ in outDir. Useful for peer deps or precise pins.
+dependencies: { "react": "^18.2.0" },
+```
+
+When using the `string[]` form, any dep with the same name set via
+`packageJsonOverrides.dependencies` is overwritten by the install.
+
 ## Example
 
 ```bash
 cd example && deno run -A build.ts
 ```
+
+## Breaking Changes
+
+### 1.12.0
+
+- **`npmBuild` now returns `Promise<NpmBuildResult>` instead of `Promise<void>`.**
+  Callers that only `await` the result are unaffected. Callers that explicitly
+  annotated the return type as `Promise<void>` need to update.
+- **`package.json` now includes a `files` field** auto-derived from `dist` plus
+  any `rootFiles` actually copied. npm will only publish files listed here. To
+  restore the old "publish everything npm doesn't ignore" behavior, pass
+  `packageJsonOverrides: { files: undefined }` — but the new default is usually
+  what you want.
+- **Dotfiles in `srcDir` are no longer copied by default.** Set
+  `includeHidden: true` to restore the old behavior.
+- **`tsc` is now invoked via `npx tsc`** (previously a plain `tsc`). If you had
+  a global TypeScript install, this is transparent. If `tsc` was not in PATH
+  before, the build used to fail — now it picks up a project-local TypeScript
+  or auto-installs on demand.
+- **Non-TypeScript files inside `srcDir` are now passed through to `dist/`.**
+  Previously they were silently dropped. If you relied on that drop behavior,
+  move those files out of `srcDir`.
+- **Empty `entryPoints: []` now throws** instead of producing a broken
+  `package.json` with `main: "dist/undefined.js"`.
+
+### 1.11.0 and earlier
+
+- Import rewriting now handles **side-effect imports** (`import "./x.ts"`).
+  Previously only `from "./x.ts"` and `import("./x.ts")` were rewritten,
+  producing broken output for any file containing a side-effect `.ts` import.
+- `sourceFiles` entries with **nested paths** (e.g. `"utils/foo.ts"`) now work
+  correctly; previously they crashed with `NotFound` because the destination
+  directory wasn't created.
+- Path handling uses `dirname` from `@std/path` instead of `lastIndexOf("/")`,
+  so builds work correctly on Windows.
