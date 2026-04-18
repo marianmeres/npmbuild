@@ -7,7 +7,7 @@
 | Field | Value |
 |-------|-------|
 | Name | `@marianmeres/npmbuild` |
-| Version | `1.11.0` (pending bump to `1.12.0` — see "Breaking Changes") |
+| Version | `1.12.0` |
 | Runtime | Deno |
 | License | MIT |
 | Author | Marian Meres |
@@ -132,6 +132,32 @@ Field accepts two shapes:
 | `Record<string, string>` | Declared verbatim in `package.json`. No install performed. No `node_modules/` created. |
 
 Precedence: with `string[]`, `npm install` overwrites any matching dep name set via `packageJsonOverrides.dependencies`.
+
+## Helper: `versionizeDeps`
+
+```typescript
+export function versionizeDeps(
+  deps: string[],
+  pathToDenoJson: string = "../deno.json",
+): string[]
+```
+
+Appends versions to bare dependency names by reading `deno.json`'s `imports` map. Designed to compose with `npmBuild`'s `dependencies: string[]` form so consumers don't hand-sync versions between `deno.json` and the build script.
+
+| Input dep | `imports` entry | Output |
+|-----------|-----------------|--------|
+| `"@marianmeres/clog"` | `"jsr:@marianmeres/clog@^2"` | `"@marianmeres/clog@^2"` |
+| `"pg"` | `"npm:pg@^8.11.0"` | `"pg@^8.11.0"` |
+| `"@types/pg"` | `"npm:@types/pg@^8"` | `"@types/pg@^8"` |
+| `"pg@^4"` (already versioned) | any | `"pg@^4"` (passthrough) |
+| `"missing-pkg"` | not in imports | `"missing-pkg"` (passthrough) |
+| any | URL / `jsr:` or `npm:` without `@version` | passthrough |
+
+Detection of "already versioned": `dep.lastIndexOf("@") > 0` (treats scope `@` at index 0 as non-version).
+
+Version extraction: strips a leading `jsr:` or `npm:` prefix from the imports value, then takes the substring after the last `@` (if that index is `> 0`). Values without a recognized registry prefix are skipped.
+
+Errors: missing `deno.json` or invalid JSON propagates from the underlying `Deno.readTextFileSync` / `JSON.parse` call.
 
 ## Generated TypeScript Config
 

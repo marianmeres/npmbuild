@@ -34,6 +34,60 @@ export function rewriteTsImports(source: string): string {
 }
 
 /**
+ * Extracts the version specifier out of a `deno.json` imports-map value.
+ *
+ * Accepts forms like `jsr:@scope/name@^1.2`, `npm:pg@^8`, or `npm:@types/pg@^8`
+ * and returns the version fragment after the last `@` (excluding the scope
+ * prefix `@`). Returns `null` for URL/path entries or registry entries without
+ * a version.
+ */
+function extractImportVersion(importValue: string): string | null {
+	const stripped = importValue.replace(/^(jsr:|npm:)/, "");
+	if (stripped === importValue) return null;
+	const atIndex = stripped.lastIndexOf("@");
+	if (atIndex <= 0) return null;
+	return stripped.slice(atIndex + 1);
+}
+
+/**
+ * Appends versions to bare dependency names by looking them up in the
+ * `imports` map of a `deno.json` file. Entries that already carry a version
+ * (e.g. `"pg@^4"`) or are not present in `imports` are returned unchanged.
+ *
+ * The result is suitable to pass directly as {@link NpmBuildOptions.dependencies}:
+ *
+ * ```ts
+ * await npmBuild({
+ *   // ...
+ *   dependencies: versionizeDeps(
+ *     ["@marianmeres/clog", "pg@^4", "@types/pg"],
+ *     "../deno.json",
+ *   ),
+ * });
+ * ```
+ *
+ * @param deps - Dependency names, with or without a version specifier.
+ * @param pathToDenoJson - Path to `deno.json`, resolved against Deno's cwd.
+ *   Defaults to `"../deno.json"`, matching the common "build script lives in
+ *   a subdirectory" layout.
+ */
+export function versionizeDeps(
+	deps: string[],
+	pathToDenoJson: string = "../deno.json",
+): string[] {
+	const denoJson = JSON.parse(Deno.readTextFileSync(pathToDenoJson));
+	const imports: Record<string, string> = denoJson.imports ?? {};
+
+	return deps.map((dep) => {
+		if (dep.lastIndexOf("@") > 0) return dep;
+		const entry = imports[dep];
+		if (!entry) return dep;
+		const version = extractImportVersion(entry);
+		return version ? `${dep}@${version}` : dep;
+	});
+}
+
+/**
  * Configuration for building an npm package from Deno source
  */
 export interface NpmBuildOptions {

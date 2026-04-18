@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { rewriteTsImports } from "./npm-build.ts";
+import { rewriteTsImports, versionizeDeps } from "./npm-build.ts";
 
 Deno.test("rewriteTsImports: static named import", () => {
 	assertEquals(
@@ -104,4 +104,113 @@ Deno.test("rewriteTsImports: nested relative paths preserved", () => {
 		rewriteTsImports(`import { x } from "../../deep/nested/file.ts";`),
 		`import { x } from "../../deep/nested/file.js";`,
 	);
+});
+
+function withTempDenoJson(
+	imports: Record<string, string>,
+	fn: (path: string) => void,
+): void {
+	const path = Deno.makeTempFileSync({ suffix: ".json" });
+	try {
+		Deno.writeTextFileSync(path, JSON.stringify({ imports }));
+		fn(path);
+	} finally {
+		Deno.removeSync(path);
+	}
+}
+
+Deno.test("versionizeDeps: resolves bare scoped jsr import", () => {
+	withTempDenoJson(
+		{ "@marianmeres/clog": "jsr:@marianmeres/clog@^2" },
+		(p) => {
+			assertEquals(versionizeDeps(["@marianmeres/clog"], p), [
+				"@marianmeres/clog@^2",
+			]);
+		},
+	);
+});
+
+Deno.test("versionizeDeps: resolves bare unscoped npm import", () => {
+	withTempDenoJson({ "pg": "npm:pg@^8.11.0" }, (p) => {
+		assertEquals(versionizeDeps(["pg"], p), ["pg@^8.11.0"]);
+	});
+});
+
+Deno.test("versionizeDeps: resolves scoped @types/* from npm", () => {
+	withTempDenoJson({ "@types/pg": "npm:@types/pg@^8" }, (p) => {
+		assertEquals(versionizeDeps(["@types/pg"], p), ["@types/pg@^8"]);
+	});
+});
+
+Deno.test("versionizeDeps: already-versioned entry passes through", () => {
+	withTempDenoJson({ "pg": "npm:pg@^8.11.0" }, (p) => {
+		assertEquals(versionizeDeps(["pg@^4"], p), ["pg@^4"]);
+	});
+});
+
+Deno.test("versionizeDeps: already-versioned scoped entry passes through", () => {
+	withTempDenoJson({ "@types/pg": "npm:@types/pg@^8" }, (p) => {
+		assertEquals(versionizeDeps(["@types/pg@^7"], p), ["@types/pg@^7"]);
+	});
+});
+
+Deno.test("versionizeDeps: dep not in imports passes through", () => {
+	withTempDenoJson({ "pg": "npm:pg@^8" }, (p) => {
+		assertEquals(versionizeDeps(["missing-pkg"], p), ["missing-pkg"]);
+	});
+});
+
+Deno.test("versionizeDeps: import entry without version passes through", () => {
+	withTempDenoJson({ "@scope/name": "jsr:@scope/name" }, (p) => {
+		assertEquals(versionizeDeps(["@scope/name"], p), ["@scope/name"]);
+	});
+});
+
+Deno.test("versionizeDeps: URL import entry passes through", () => {
+	withTempDenoJson(
+		{ "something": "https://example.com/mod.ts" },
+		(p) => {
+			assertEquals(versionizeDeps(["something"], p), ["something"]);
+		},
+	);
+});
+
+Deno.test("versionizeDeps: mixed batch matches typical usage", () => {
+	withTempDenoJson(
+		{
+			"@marianmeres/clog": "jsr:@marianmeres/clog@^2",
+			"@marianmeres/modelize": "jsr:@marianmeres/modelize@^1.0.3",
+			"pg": "npm:pg@^8.11.0",
+			"@types/pg": "npm:@types/pg@^8",
+		},
+		(p) => {
+			assertEquals(
+				versionizeDeps(
+					[
+						"@marianmeres/clog",
+						"@marianmeres/modelize",
+						"pg@^4",
+						"@types/pg",
+					],
+					p,
+				),
+				[
+					"@marianmeres/clog@^2",
+					"@marianmeres/modelize@^1.0.3",
+					"pg@^4",
+					"@types/pg@^8",
+				],
+			);
+		},
+	);
+});
+
+Deno.test("versionizeDeps: missing deno.json throws", () => {
+	let threw = false;
+	try {
+		versionizeDeps(["pg"], "/tmp/__definitely_missing_deno_json__.json");
+	} catch {
+		threw = true;
+	}
+	assertEquals(threw, true);
 });

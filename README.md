@@ -1,6 +1,7 @@
 # @marianmeres/npmbuild
 
 [![JSR](https://jsr.io/badges/@marianmeres/npmbuild)](https://jsr.io/@marianmeres/npmbuild)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A minimal Deno-to-npm build tool for pure TypeScript packages. A lightweight alternative to dnt.
 
@@ -38,28 +39,11 @@ Publish:
 cd .npm-dist && npm publish
 ```
 
-## Options
+## API
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `name` | required | Package name |
-| `version` | required | Package version |
-| `srcDir` | `"src"` | Source directory containing TypeScript files |
-| `outDir` | `".npm-dist"` | Output directory for npm package |
-| `author` | `"Marian Meres"` | Package author |
-| `license` | `"MIT"` | Package license |
-| `repository` | - | GitHub repo (e.g., `"user/repo"`) for package.json URLs |
-| `sourceFiles` | all files from srcDir | Source files to copy from srcDir (nested paths supported) |
-| `rootFiles` | `["LICENSE", "README.md", "API.md", "AGENTS.md", "CLAUDE.md", "docs"]` | Root files or directories to copy to package (missing entries are skipped, directories are copied recursively) |
-| `dependencies` | `[]` | npm dependencies. `string[]` installs via `npm install` and pins to caret range. `Record<string, string>` declares verbatim without installing. |
-| `jsrDependencies` | `[]` | JSR dependencies to install via `npx jsr add` during build |
-| `tsconfig` | `{}` | tsconfig overrides (deep merged), e.g. `{ compilerOptions: { strict: true } }` |
-| `entryPoints` | `["mod"]` | Entry point names (without extension). Each generates exports. Must be non-empty. |
-| `packageJsonOverrides` | `{}` | Arbitrary package.json fields (deep merged) |
-| `quiet` | `false` | Suppress decorative console output. Auto-stripped when `NO_COLOR` env var is set. |
-| `includeHidden` | `false` | Include dotfiles (e.g. `.DS_Store`, `.gitkeep`) when copying `srcDir` |
-
-`npmBuild(...)` returns a `Promise<NpmBuildResult>` with `{ outDir, entryPoints, packageJson }` — useful for post-build steps (e.g. `npm pack --dry-run` to verify the published file list).
+See [API.md](API.md) for the complete API reference, including all
+`NpmBuildOptions` fields, `NpmBuildResult`, and the exported helpers
+`versionizeDeps` and `rewriteTsImports`.
 
 ## Why not dnt?
 
@@ -155,6 +139,44 @@ dependencies: { "react": "^18.2.0" },
 
 When using the `string[]` form, any dep with the same name set via
 `packageJsonOverrides.dependencies` is overwritten by the install.
+
+## Syncing Dependency Versions From `deno.json`
+
+The `versionizeDeps` helper reads your `deno.json` and appends versions to bare
+dependency names from the `imports` map, so you don't have to hand-sync versions
+between `deno.json` and your build script:
+
+```ts
+import { npmBuild, versionizeDeps } from "jsr:@marianmeres/npmbuild";
+
+const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
+
+await npmBuild({
+	name: denoJson.name,
+	version: denoJson.version,
+	repository: denoJson.name.replace(/^@/, ""),
+	dependencies: versionizeDeps(
+		[
+			"@marianmeres/clog",
+			"@marianmeres/modelize",
+			"pg@^4",      // already versioned — passes through untouched
+			"@types/pg",
+		],
+		"../deno.json",
+	),
+});
+```
+
+Signature: `versionizeDeps(deps: string[], pathToDenoJson: string = "../deno.json"): string[]`
+
+Behavior:
+
+- Bare names (e.g. `"@marianmeres/clog"`) are resolved against `deno.json`'s
+  `imports` map; the version is extracted from the `jsr:` / `npm:` specifier
+  and appended.
+- Entries that already carry a version (e.g. `"pg@^4"`) pass through unchanged.
+- Names not present in `imports` also pass through unchanged, letting
+  `npm install` resolve them.
 
 ## Example
 
