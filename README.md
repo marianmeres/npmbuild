@@ -162,12 +162,18 @@ await npmBuild({
 			"pg@^4",      // already versioned — passes through untouched
 			"@types/pg",
 		],
-		"../deno.json",
+		denoJson, // or a path string like "../deno.json"
 	),
 });
 ```
 
-Signature: `versionizeDeps(deps: string[], pathToDenoJson: string = "../deno.json"): string[]`
+Signature: `versionizeDeps(deps: string[], denoJsonOrPath?: string | Record<string, unknown>): string[]`
+
+The second argument accepts either:
+
+- a path to `deno.json` (default `"../deno.json"`), which is read and parsed, or
+- an already-parsed `deno.json` object, which avoids a redundant file read when
+  you've loaded it yourself (e.g. to pull `name`/`version` out of it).
 
 Behavior:
 

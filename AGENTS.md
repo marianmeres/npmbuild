@@ -138,11 +138,13 @@ Precedence: with `string[]`, `npm install` overwrites any matching dep name set 
 ```typescript
 export function versionizeDeps(
   deps: string[],
-  pathToDenoJson: string = "../deno.json",
+  denoJsonOrPath: string | Record<string, unknown> = "../deno.json",
 ): string[]
 ```
 
 Appends versions to bare dependency names by reading `deno.json`'s `imports` map. Designed to compose with `npmBuild`'s `dependencies: string[]` form so consumers don't hand-sync versions between `deno.json` and the build script.
+
+The second argument accepts either a path (read and parsed at call time) or a pre-parsed `deno.json` object. Prefer the object form when the caller has already loaded `deno.json` (common: reading `name`/`version` for `npmBuild`), avoiding a redundant read + parse.
 
 | Input dep | `imports` entry | Output |
 |-----------|-----------------|--------|
@@ -157,7 +159,7 @@ Detection of "already versioned": `dep.lastIndexOf("@") > 0` (treats scope `@` a
 
 Version extraction: strips a leading `jsr:` or `npm:` prefix from the imports value, then takes the substring after the last `@` (if that index is `> 0`). Values without a recognized registry prefix are skipped.
 
-Errors: missing `deno.json` or invalid JSON propagates from the underlying `Deno.readTextFileSync` / `JSON.parse` call.
+Errors: missing `deno.json` or invalid JSON propagates from the underlying `Deno.readTextFileSync` / `JSON.parse` call (path form only; the object form bypasses the file read).
 
 ## Generated TypeScript Config
 

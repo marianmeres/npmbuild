@@ -66,17 +66,33 @@ function extractImportVersion(importValue: string): string | null {
  * });
  * ```
  *
+ * If you already have `deno.json` loaded (e.g. to read `name`/`version`),
+ * pass the parsed object directly to avoid re-reading the file:
+ *
+ * ```ts
+ * const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
+ * await npmBuild({
+ *   name: denoJson.name,
+ *   version: denoJson.version,
+ *   dependencies: versionizeDeps(["@marianmeres/clog", "pg@^4"], denoJson),
+ * });
+ * ```
+ *
  * @param deps - Dependency names, with or without a version specifier.
- * @param pathToDenoJson - Path to `deno.json`, resolved against Deno's cwd.
- *   Defaults to `"../deno.json"`, matching the common "build script lives in
- *   a subdirectory" layout.
+ * @param denoJsonOrPath - Either a path to `deno.json` (resolved against
+ *   Deno's cwd) or an already-parsed `deno.json` object. Defaults to
+ *   `"../deno.json"`, matching the common "build script lives in a
+ *   subdirectory" layout.
  */
 export function versionizeDeps(
 	deps: string[],
-	pathToDenoJson: string = "../deno.json",
+	denoJsonOrPath: string | Record<string, unknown> = "../deno.json",
 ): string[] {
-	const denoJson = JSON.parse(Deno.readTextFileSync(pathToDenoJson));
-	const imports: Record<string, string> = denoJson.imports ?? {};
+	const denoJson = typeof denoJsonOrPath === "string"
+		? JSON.parse(Deno.readTextFileSync(denoJsonOrPath))
+		: denoJsonOrPath;
+	const imports: Record<string, string> =
+		(denoJson.imports as Record<string, string>) ?? {};
 
 	return deps.map((dep) => {
 		if (dep.lastIndexOf("@") > 0) return dep;

@@ -205,6 +205,23 @@ Deno.test("versionizeDeps: mixed batch matches typical usage", () => {
 	);
 });
 
+Deno.test("versionizeDeps: accepts pre-parsed deno.json object", () => {
+	const denoJson = {
+		imports: {
+			"@marianmeres/clog": "jsr:@marianmeres/clog@^2",
+			"pg": "npm:pg@^8.11.0",
+		},
+	};
+	assertEquals(
+		versionizeDeps(["@marianmeres/clog", "pg@^4", "missing"], denoJson),
+		["@marianmeres/clog@^2", "pg@^4", "missing"],
+	);
+});
+
+Deno.test("versionizeDeps: object without imports is tolerated", () => {
+	assertEquals(versionizeDeps(["pg"], {}), ["pg"]);
+});
+
 Deno.test("versionizeDeps: missing deno.json throws", () => {
 	let threw = false;
 	try {

@@ -38,17 +38,19 @@ const result = await npmBuild({
 
 ---
 
-### `versionizeDeps(deps, pathToDenoJson?)`
+### `versionizeDeps(deps, denoJsonOrPath?)`
 
 Appends versions to bare dependency names by reading the `imports` map from a
-`deno.json` file. Composes with [`npmBuild`](#npmbuildoptions)'s
-`dependencies: string[]` form so the build script doesn't have to hand-sync
-versions with `deno.json`.
+`deno.json` file (or a pre-parsed object). Composes with
+[`npmBuild`](#npmbuildoptions)'s `dependencies: string[]` form so the build
+script doesn't have to hand-sync versions with `deno.json`.
 
 **Parameters:**
 - `deps` (`string[]`) — dependency names, with or without a version specifier.
-- `pathToDenoJson` (`string`, optional) — path to `deno.json`, resolved against
-  Deno's cwd. Default: `"../deno.json"`.
+- `denoJsonOrPath` (`string | Record<string, unknown>`, optional) — either a
+  path to `deno.json` (resolved against Deno's cwd) or an already-parsed
+  `deno.json` object. Pass the object form to avoid a redundant file read when
+  you've loaded `deno.json` already. Default: `"../deno.json"`.
 
 **Returns:** `string[]` — dependency specs suitable for
 [`NpmBuildOptions.dependencies`](#npmbuildoptions).
@@ -68,7 +70,7 @@ Detection of "already versioned": `dep.lastIndexOf("@") > 0` (scope `@` at
 index 0 is not treated as a version separator).
 
 Errors: missing `deno.json` or invalid JSON propagates from the underlying
-`Deno.readTextFileSync` / `JSON.parse` call.
+`Deno.readTextFileSync` / `JSON.parse` call (path form only).
 
 **Example:**
 
@@ -80,9 +82,11 @@ const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
 await npmBuild({
     name: denoJson.name,
     version: denoJson.version,
+    // Pass the already-loaded object to skip a second read/parse.
+    // A path string like "../deno.json" also works.
     dependencies: versionizeDeps(
         ["@marianmeres/clog", "pg@^4", "@types/pg"],
-        "../deno.json",
+        denoJson,
     ),
 });
 ```
