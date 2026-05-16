@@ -160,10 +160,13 @@ await npmBuild({
 `peerDependencies` accepts the same two shapes as `dependencies`:
 
 - `string[]` — entries in `name@version` form (typically from `versionizeDeps`).
-  Bare names without `@version` are emitted with `"*"` as the range.
-- `Record<string, string>` — declared verbatim.
+  Installed locally with `npm install --no-save` so `tsc` can resolve their
+  types during the build; they do **not** appear in `dependencies` of the
+  published `package.json`. Bare names without `@version` get `"*"` as the
+  range.
+- `Record<string, string>` — declared verbatim, no install performed.
 
-Both fields are only emitted when non-empty.
+Both fields are only emitted in `package.json` when non-empty.
 
 ## Syncing Dependency Versions From `deno.json`
 

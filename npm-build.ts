@@ -139,13 +139,17 @@ export interface NpmBuildOptions {
 	 */
 	dependencies?: string[] | Record<string, string>;
 	/**
-	 * npm peerDependencies. Declared verbatim in `package.json` — no install
-	 * is performed (peer deps are the consumer's responsibility). Accepts:
+	 * npm peerDependencies. Always declared in `package.json` as a peer dep.
+	 * Accepts:
 	 *
 	 * - `string[]` — entries in `name@version` form (use {@link versionizeDeps}
-	 *   to derive these from `deno.json`). Bare names without `@version` are
-	 *   emitted with `"*"` as the range.
-	 * - `Record<string, string>` — declared verbatim.
+	 *   to derive these from `deno.json`). Installed locally with
+	 *   `npm install --no-save` so `tsc` can resolve their types during the
+	 *   build, but they do not appear in `dependencies` of the published
+	 *   `package.json`. Bare names without `@version` are emitted with `"*"`
+	 *   as the range.
+	 * - `Record<string, string>` — declared verbatim; no install is performed
+	 *   (caller is responsible for any local availability needed by `tsc`).
 	 *
 	 * Default: none (no `peerDependencies` field emitted).
 	 */
@@ -440,6 +444,14 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 	// install dependencies if any (string[] form only — Record<string,string> is declared, not installed)
 	if (Array.isArray(dependencies) && dependencies.length > 0) {
 		await runCommand("npm", ["install", ...dependencies]);
+	}
+
+	// install peerDependencies with --no-save (string[] form only) so tsc can
+	// resolve their types during compile. They stay only in peerDependencies
+	// in the published package.json — node_modules and package-lock are not
+	// part of the npm publish output anyway.
+	if (Array.isArray(peerDependencies) && peerDependencies.length > 0) {
+		await runCommand("npm", ["install", "--no-save", ...peerDependencies]);
 	}
 
 	// install JSR dependencies if any

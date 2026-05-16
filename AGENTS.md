@@ -141,8 +141,8 @@ Precedence: with `string[]`, `npm install` overwrites any matching dep name set 
 
 | Field | Shape | Behavior |
 |-------|-------|----------|
-| `peerDependencies` | `string[]` | Entries in `name@version` form (typically from `versionizeDeps`). Bare names without `@version` get `"*"` as the range. |
-| `peerDependencies` | `Record<string, string>` | Declared verbatim. |
+| `peerDependencies` | `string[]` | Entries in `name@version` form (typically from `versionizeDeps`). Installed locally with `npm install --no-save` so tsc can resolve their types during build; they do **not** appear in `dependencies`. Bare names without `@version` get `"*"` as the range. |
+| `peerDependencies` | `Record<string, string>` | Declared verbatim. No install performed. |
 | `peerDependenciesMeta` | `Record<string, unknown>` | Declared verbatim, e.g. `{ "@scope/pkg": { optional: true } }`. |
 
 Both fields are only emitted in `package.json` when non-empty.
