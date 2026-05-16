@@ -64,6 +64,8 @@ interface NpmBuildOptions {
   sourceFiles?: string[];              // explicit list (nested paths OK); defaults to walking srcDir
   rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md", "CLAUDE.md", "docs"]
   dependencies?: string[] | Record<string, string>;  // see "Dependencies" below
+  peerDependencies?: string[] | Record<string, string>;  // see "Peer Dependencies" below
+  peerDependenciesMeta?: Record<string, unknown>;    // emitted verbatim (e.g. `{ "@scope/pkg": { optional: true } }`)
   jsrDependencies?: string[];          // installed via `npx jsr add`
   tsconfig?: Record<string, unknown>;  // tsconfig overrides (deep merged)
   entryPoints?: string[];              // default: ["mod"] — must be non-empty
@@ -132,6 +134,18 @@ Field accepts two shapes:
 | `Record<string, string>` | Declared verbatim in `package.json`. No install performed. No `node_modules/` created. |
 
 Precedence: with `string[]`, `npm install` overwrites any matching dep name set via `packageJsonOverrides.dependencies`.
+
+## Peer Dependencies
+
+`peerDependencies` and `peerDependenciesMeta` are emitted verbatim — no install is performed.
+
+| Field | Shape | Behavior |
+|-------|-------|----------|
+| `peerDependencies` | `string[]` | Entries in `name@version` form (typically from `versionizeDeps`). Bare names without `@version` get `"*"` as the range. |
+| `peerDependencies` | `Record<string, string>` | Declared verbatim. |
+| `peerDependenciesMeta` | `Record<string, unknown>` | Declared verbatim, e.g. `{ "@scope/pkg": { optional: true } }`. |
+
+Both fields are only emitted in `package.json` when non-empty.
 
 ## Helper: `versionizeDeps`
 

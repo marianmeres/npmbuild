@@ -140,6 +140,31 @@ dependencies: { "react": "^18.2.0" },
 When using the `string[]` form, any dep with the same name set via
 `packageJsonOverrides.dependencies` is overwritten by the install.
 
+## Peer Dependencies
+
+`peerDependencies` and `peerDependenciesMeta` are emitted verbatim — no install
+is performed (peer deps are the consumer's responsibility):
+
+```ts
+await npmBuild({
+	name: "@scope/clog",
+	version: "3.20.0",
+	peerDependencies: versionizeDeps(["@scope/batch"], denoJson),
+	peerDependenciesMeta: {
+		"@scope/batch": { optional: true },
+	},
+	entryPoints: ["mod", "forward"],
+});
+```
+
+`peerDependencies` accepts the same two shapes as `dependencies`:
+
+- `string[]` — entries in `name@version` form (typically from `versionizeDeps`).
+  Bare names without `@version` are emitted with `"*"` as the range.
+- `Record<string, string>` — declared verbatim.
+
+Both fields are only emitted when non-empty.
+
 ## Syncing Dependency Versions From `deno.json`
 
 The `versionizeDeps` helper reads your `deno.json` and appends versions to bare

@@ -138,6 +138,29 @@ export interface NpmBuildOptions {
 	 * Default: `[]` (no dependencies).
 	 */
 	dependencies?: string[] | Record<string, string>;
+	/**
+	 * npm peerDependencies. Declared verbatim in `package.json` — no install
+	 * is performed (peer deps are the consumer's responsibility). Accepts:
+	 *
+	 * - `string[]` — entries in `name@version` form (use {@link versionizeDeps}
+	 *   to derive these from `deno.json`). Bare names without `@version` are
+	 *   emitted with `"*"` as the range.
+	 * - `Record<string, string>` — declared verbatim.
+	 *
+	 * Default: none (no `peerDependencies` field emitted).
+	 */
+	peerDependencies?: string[] | Record<string, string>;
+	/**
+	 * `peerDependenciesMeta` block, emitted verbatim. Typical use to mark a
+	 * peer dependency as optional:
+	 *
+	 * ```ts
+	 * peerDependenciesMeta: { "@scope/pkg": { optional: true } }
+	 * ```
+	 *
+	 * Default: none (no `peerDependenciesMeta` field emitted).
+	 */
+	peerDependenciesMeta?: Record<string, unknown>;
 	/** JSR dependencies to install via 'npx jsr add' (default: none) */
 	jsrDependencies?: string[];
 	/** tsconfig overrides (deep merged), e.g. { compilerOptions: { strict: true }, include: [...] } */
@@ -201,6 +224,8 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 			"docs",
 		],
 		dependencies = [],
+		peerDependencies = [],
+		peerDependenciesMeta,
 		jsrDependencies = [],
 		tsconfig: tsconfigOverrides = {},
 		entryPoints = ["mod"],
@@ -339,19 +364,38 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 		? {}
 		: { ...dependencies };
 
+	const declaredPeerDeps: Record<string, string> = Array.isArray(peerDependencies)
+		? Object.fromEntries(
+			peerDependencies.map((entry) => {
+				const at = entry.lastIndexOf("@");
+				return at > 0
+					? [entry.slice(0, at), entry.slice(at + 1)]
+					: [entry, "*"];
+			}),
+		)
+		: { ...peerDependencies };
+
+	const basePackageJson: Record<string, unknown> = {
+		name,
+		version,
+		type: "module",
+		main: `dist/${mainEntry}.js`,
+		types: `dist/${mainEntry}.d.ts`,
+		exports: exportsMap,
+		files: ["dist", ...copiedRootFiles],
+		author,
+		license,
+		dependencies: declaredDeps,
+	};
+	if (Object.keys(declaredPeerDeps).length > 0) {
+		basePackageJson.peerDependencies = declaredPeerDeps;
+	}
+	if (peerDependenciesMeta && Object.keys(peerDependenciesMeta).length > 0) {
+		basePackageJson.peerDependenciesMeta = peerDependenciesMeta;
+	}
+
 	const packageJson: Record<string, unknown> = deepMerge(
-		{
-			name,
-			version,
-			type: "module",
-			main: `dist/${mainEntry}.js`,
-			types: `dist/${mainEntry}.d.ts`,
-			exports: exportsMap,
-			files: ["dist", ...copiedRootFiles],
-			author,
-			license,
-			dependencies: declaredDeps,
-		},
+		basePackageJson,
 		packageJsonOverrides,
 	);
 
