@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/npmbuild",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Minimal build tool that turns a Deno-style TypeScript source tree into an npm-publishable ESM package.",
   "license": "MIT",
   "author": "Marian Meres",
