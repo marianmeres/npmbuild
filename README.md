@@ -1,37 +1,51 @@
 # @marianmeres/npmbuild
 
+[![NPM](https://img.shields.io/npm/v/@marianmeres/npmbuild)](https://www.npmjs.com/package/@marianmeres/npmbuild)
 [![JSR](https://jsr.io/badges/@marianmeres/npmbuild)](https://jsr.io/@marianmeres/npmbuild)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A minimal Deno-to-npm build tool for pure TypeScript packages. A lightweight alternative to dnt.
+A minimal build tool that turns a Deno-style TypeScript source tree (`.ts` import
+specifiers, versions in `deno.json`) into an npm-publishable ESM package. A lightweight
+alternative to dnt.
+
+The tool itself runs on Node (from npm) and on Deno (from JSR). It is written against
+`node:*` only, so both run the same code.
 
 ## Installation
 
-```ts
-import { npmBuild } from "jsr:@marianmeres/npmbuild";
+```bash
+pnpm add -D @marianmeres/npmbuild   # Node (>= 24.12)
+deno add jsr:@marianmeres/npmbuild  # Deno
 ```
+
+Both need `npm` / `npx` on `PATH`: the build runs `npx tsc` and, if asked, `npm install`.
 
 ## Usage
 
-Create a build script (e.g., `scripts/npm-build.ts`):
+Create a build script (e.g., `scripts/build-npm.ts`):
 
 ```ts
-import { npmBuild } from "jsr:@marianmeres/npmbuild";
+import { readFileSync } from "node:fs";
+import { npmBuild } from "@marianmeres/npmbuild";
 
-const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
+const denoJson = JSON.parse(readFileSync("deno.json", "utf8"));
 
 await npmBuild({
 	name: denoJson.name,
 	version: denoJson.version,
-	repository: denoJson.name.replace(/^@/, ''), // conventional mm usage
+	repository: denoJson.name.replace(/^@/, ""), // conventional mm usage
 });
 ```
 
-Run:
+Run it from the project root:
 
 ```bash
-deno run -A scripts/npm-build.ts
+node scripts/build-npm.ts          # Node
+deno run -A scripts/build-npm.ts   # Deno
 ```
+
+A script that reads `deno.json` with `Deno.readTextFileSync` keeps working on Deno; it
+only needs `node:fs` (as above) to run on Node.
 
 Publish:
 
@@ -54,7 +68,7 @@ This package takes the opposite approach: simplicity over features.
 - **No `Deno.*` APIs** - The packages I publish to npm are pure TypeScript with no Deno-specific code, so I don't need shims or polyfills.
 - **ESM only** - Modern Node.js (14+) supports ESM natively. CommonJS output is unnecessary overhead.
 - **Local files only** - I don't use remote imports in code destined for npm. A simple file copy and import rewrite is sufficient.
-- **~100 lines of code** - Easy to understand, debug, and modify. No abstraction layers, no magic.
+- **One file, no runtime dependencies** - Easy to understand, debug, and modify. No abstraction layers, no magic.
 
 If you need dnt's features, use dnt. If you just want to run `tsc` on some local TypeScript files and produce a publishable npm package, this might be enough.
 
@@ -98,7 +112,9 @@ This expects `src/mod.ts`, `src/utils.ts`, and `src/helpers.ts` to exist, and ge
 }
 ```
 
-Use `packageJsonOverrides` to add additional fields or merge extra exports:
+Use `packageJsonOverrides` to add additional fields or merge extra exports. Objects merge
+key by key, arrays are appended to (so `files: ["extra"]` adds to the generated list), and
+a field set to `undefined` is removed:
 
 ```ts
 await npmBuild({
@@ -107,9 +123,9 @@ await npmBuild({
 	packageJsonOverrides: {
 		keywords: ["typescript", "utility"],
 		exports: {
-			"./package.json": "./package.json"
-		}
-	}
+			"./package.json": "./package.json",
+		},
+	},
 });
 ```
 
@@ -175,9 +191,10 @@ dependency names from the `imports` map, so you don't have to hand-sync versions
 between `deno.json` and your build script:
 
 ```ts
-import { npmBuild, versionizeDeps } from "jsr:@marianmeres/npmbuild";
+import { readFileSync } from "node:fs";
+import { npmBuild, versionizeDeps } from "@marianmeres/npmbuild";
 
-const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
+const denoJson = JSON.parse(readFileSync("deno.json", "utf8"));
 
 await npmBuild({
 	name: denoJson.name,
@@ -187,7 +204,7 @@ await npmBuild({
 		[
 			"@marianmeres/clog",
 			"@marianmeres/modelize",
-			"pg@^4",      // already versioned — passes through untouched
+			"pg@^4", // already versioned — passes through untouched
 			"@types/pg",
 		],
 		denoJson, // or a path string like "../deno.json"
@@ -215,10 +232,24 @@ Behavior:
 ## Example
 
 ```bash
-cd example && deno run -A build.ts
+cd example && node build.ts   # or: deno run -A build.ts
 ```
 
-## Breaking Changes
+It installs `@marianmeres/clog` from npm into `example/.npm-dist`, so it needs network.
+
+## Notable Changes
+
+### 1.17.0
+
+- **Runs on Node.** The source uses `node:*` only (no `Deno.*`, no `@std/*`), and the
+  package is now also published to npm as `@marianmeres/npmbuild`. JSR stays: Deno
+  consumers run the same code through Deno's Node compatibility. API, options and the
+  generated output are unchanged.
+- Errors from the file system are Node-style errors (`err.code === "ENOENT"`), not
+  `Deno.errors.*` instances — e.g. `versionizeDeps` with a missing path.
+- Console colours are ANSI codes instead of `%c` CSS, so they also show on Node. With
+  `NO_COLOR` set, the per-file progress and "not found" lines now print the file name
+  (they used to print a literal `%s`).
 
 ### 1.12.0
 

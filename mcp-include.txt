@@ -1,3 +1,6 @@
-Deno build tool that converts Deno TypeScript projects into npm-publishable packages, 
-handling import rewriting, TypeScript compilation, declaration generation, and package.json 
-creation.
+Build tool that turns a Deno-style TypeScript source tree (.ts import specifiers, versions
+in deno.json) into an npm-publishable ESM package: import rewriting (.ts -> .js), tsc
+compilation with declarations, package.json generation (exports per entry point, files,
+dependencies, peerDependencies), non-TS asset passthrough. Also exports versionizeDeps
+(versions from deno.json imports) and rewriteTsImports. Runs on Node (npm) and on Deno
+(jsr:@marianmeres/npmbuild).

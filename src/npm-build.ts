@@ -1,6 +1,23 @@
-import { deepMerge } from "@std/collections/deep-merge";
-import { copy, emptyDir, ensureDir, walk } from "@std/fs";
-import { dirname, join, relative } from "@std/path";
+/**
+ * @module
+ *
+ * Builds an npm-publishable ESM package (`dist/` JS + `.d.ts`, `package.json`) from a
+ * Deno-style TypeScript source tree: `.ts` import specifiers, versions in `deno.json`.
+ *
+ * Written against `node:*` only, so the same file runs on Node (the npm package) and on
+ * Deno (the JSR package, through Deno's Node compatibility).
+ */
+
+import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+import process from "node:process";
+
+/** Extensions treated as TypeScript source: rewritten, and never passed through as assets. */
+const TS_EXTS = [".ts", ".tsx", ".mts", ".cts"];
+
+const isTs = (path: string): boolean => TS_EXTS.some((ext) => path.endsWith(ext));
 
 /**
  * Regex matching TypeScript relative-import forms this tool rewrites to `.js`.
@@ -70,7 +87,7 @@ function extractImportVersion(importValue: string): string | null {
  * pass the parsed object directly to avoid re-reading the file:
  *
  * ```ts
- * const denoJson = JSON.parse(Deno.readTextFileSync("deno.json"));
+ * const denoJson = JSON.parse(readFileSync("deno.json", "utf8"));
  * await npmBuild({
  *   name: denoJson.name,
  *   version: denoJson.version,
@@ -80,7 +97,7 @@ function extractImportVersion(importValue: string): string | null {
  *
  * @param deps - Dependency names, with or without a version specifier.
  * @param denoJsonOrPath - Either a path to `deno.json` (resolved against
- *   Deno's cwd) or an already-parsed `deno.json` object. Defaults to
+ *   the process cwd) or an already-parsed `deno.json` object. Defaults to
  *   `"../deno.json"`, matching the common "build script lives in a
  *   subdirectory" layout.
  */
@@ -88,9 +105,10 @@ export function versionizeDeps(
 	deps: string[],
 	denoJsonOrPath: string | Record<string, unknown> = "../deno.json",
 ): string[] {
-	const denoJson = typeof denoJsonOrPath === "string"
-		? JSON.parse(Deno.readTextFileSync(denoJsonOrPath))
-		: denoJsonOrPath;
+	const denoJson =
+		typeof denoJsonOrPath === "string"
+			? JSON.parse(readFileSync(denoJsonOrPath, "utf8"))
+			: denoJsonOrPath;
 	const imports: Record<string, string> =
 		(denoJson.imports as Record<string, string>) ?? {};
 
@@ -199,6 +217,70 @@ function hasHiddenSegment(relPath: string): boolean {
 	return false;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return (
+		value !== null &&
+		typeof value === "object" &&
+		Object.getPrototypeOf(value) === Object.prototype
+	);
+}
+
+/**
+ * Deep-merges `other` into a copy of `record` with the semantics of `deepMerge` from
+ * `@std/collections` (which it replaces, so the npm package needs no JSR registry):
+ * plain objects merge key by key, arrays concatenate, and any other value in `other`
+ * replaces the one in `record` — an explicit `undefined` included, which is how an
+ * override removes a generated field.
+ */
+function deepMerge(
+	record: Record<string, unknown>,
+	other: Record<string, unknown>,
+): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	for (const key of new Set([...Object.keys(record), ...Object.keys(other)])) {
+		if (key === "__proto__") continue;
+		const a = record[key];
+		if (!Object.hasOwn(other, key)) {
+			result[key] = a;
+			continue;
+		}
+		const b = other[key];
+		if (isPlainObject(a) && isPlainObject(b)) result[key] = deepMerge(a, b);
+		else if (Array.isArray(a) && Array.isArray(b)) result[key] = [...a, ...b];
+		else result[key] = b;
+	}
+	return result;
+}
+
+/** Every non-directory entry under `dir`, recursively. Symlinks are listed, not followed. */
+async function listFiles(dir: string): Promise<string[]> {
+	const files: string[] = [];
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const path = join(dir, entry.name);
+		if (entry.isDirectory()) files.push(...(await listFiles(path)));
+		else files.push(path);
+	}
+	return files;
+}
+
+/**
+ * Copies a file or a directory tree, overwriting what is there. Symlinks are copied as
+ * symlinks with their target unchanged: resolving a relative target (Node's default)
+ * would point a link in `outDir` back at the source tree, and the import rewrite writes
+ * through links.
+ */
+function copy(src: string, dest: string): Promise<void> {
+	return cp(src, dest, { recursive: true, force: true, verbatimSymlinks: true });
+}
+
+/** Makes sure `dir` exists and is empty. The directory itself is kept. */
+async function emptyDir(dir: string): Promise<void> {
+	await mkdir(dir, { recursive: true });
+	for (const name of await readdir(dir)) {
+		await rm(join(dir, name), { recursive: true, force: true });
+	}
+}
+
 /**
  * Builds an npm package from Deno TypeScript source.
  *
@@ -219,14 +301,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 		license = "MIT",
 		repository,
 		sourceFiles,
-		rootFiles = [
-			"LICENSE",
-			"README.md",
-			"API.md",
-			"AGENTS.md",
-			"CLAUDE.md",
-			"docs",
-		],
+		rootFiles = ["LICENSE", "README.md", "API.md", "AGENTS.md", "CLAUDE.md", "docs"],
 		dependencies = [],
 		peerDependencies = [],
 		peerDependenciesMeta,
@@ -244,33 +319,33 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 		throw new Error("npmBuild: `entryPoints` must not be empty");
 	}
 
-	const useColor = !Deno.env.get("NO_COLOR");
-	const log = (msg: string, ...styles: string[]): void => {
-		if (quiet) return;
-		if (useColor) console.log(msg, ...styles);
-		else console.log(msg.replace(/%c/g, ""));
+	const useColor = !process.env.NO_COLOR;
+	const sgr =
+		(code: string) =>
+		(s: string): string =>
+			useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
+	const gray = sgr("90");
+	const green = sgr("32");
+	const yellow = sgr("33");
+	const boldGreen = sgr("1;32");
+	const boldCyan = sgr("1;36");
+	const log = (msg: string): void => {
+		if (!quiet) console.log(msg);
 	};
-	const warn = (msg: string, ...styles: string[]): void => {
-		if (quiet) return;
-		if (useColor) console.warn(msg, ...styles);
-		else console.warn(msg.replace(/%c/g, ""));
+	const warn = (msg: string): void => {
+		if (!quiet) console.warn(msg);
 	};
 
 	const outDirSrc = join(outDir, "src");
 	const outDirDist = join(outDir, "dist");
 
+	log(gray("Building npm package: ") + boldCyan(`${name}@${version}`));
 	log(
-		`%cBuilding npm package: %c${name}@${version}`,
-		"color: gray",
-		"color: cyan; font-weight: bold",
-	);
-	log(
-		`%c{ srcDir: %c${srcDir}%c, outDir: %c${outDir}%c }`,
-		"color: gray",
-		"color: yellow",
-		"color: gray",
-		"color: yellow",
-		"color: gray",
+		gray("{ srcDir: ") +
+			yellow(srcDir) +
+			gray(", outDir: ") +
+			yellow(outDir) +
+			gray(" }"),
 	);
 
 	await emptyDir(outDir);
@@ -278,20 +353,15 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 	// copy source files (all files from srcDir by default, or explicit list if provided)
 	if (sourceFiles) {
 		for (const file of sourceFiles) {
-			log("%c    --> %s", "color: gray", file);
-			const src = join(srcDir, file);
-			const dest = join(outDirSrc, file);
-			await ensureDir(dirname(dest));
-			await copy(src, dest, { overwrite: true });
+			log(gray(`    --> ${file}`));
+			await copy(join(srcDir, file), join(outDirSrc, file));
 		}
 	} else {
-		for await (const entry of walk(srcDir, { includeDirs: false })) {
-			const rel = relative(srcDir, entry.path);
+		for (const path of await listFiles(srcDir)) {
+			const rel = relative(srcDir, path);
 			if (!includeHidden && hasHiddenSegment(rel)) continue;
-			log("%c    --> %c%s", "color: gray", "color: green", rel);
-			const dest = join(outDirSrc, rel);
-			await ensureDir(dirname(dest));
-			await copy(entry.path, dest, { overwrite: true });
+			log(gray("    --> ") + green(rel));
+			await copy(path, join(outDirSrc, rel));
 		}
 	}
 
@@ -299,34 +369,21 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 	const copiedRootFiles: string[] = [];
 	for (const asset of rootFiles) {
 		try {
-			await copy(asset, join(outDir, asset), { overwrite: true });
+			await copy(asset, join(outDir, asset));
 			copiedRootFiles.push(asset);
 		} catch (e) {
-			if (e instanceof Deno.errors.NotFound) {
-				warn(
-					"%c    --> %c%s%c not found, skipping",
-					"color: orange",
-					"color: yellow",
-					asset,
-					"color: orange",
-				);
-			} else {
-				throw e;
-			}
+			if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+			warn(yellow(`    --> ${asset} not found, skipping`));
 		}
 	}
 
 	// rewrite .ts imports to .js (tsc requires this)
-	for await (
-		const f of walk(outDirSrc, {
-			includeDirs: false,
-			exts: [".ts", ".tsx", ".mts", ".cts"],
-		})
-	) {
-		const contents = await Deno.readTextFile(f.path);
+	for (const path of await listFiles(outDirSrc)) {
+		if (!isTs(path)) continue;
+		const contents = await readFile(path, "utf8");
 		const replaced = rewriteTsImports(contents);
 		if (replaced !== contents) {
-			await Deno.writeTextFile(f.path, replaced);
+			await writeFile(path, replaced);
 		}
 	}
 
@@ -348,7 +405,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 		},
 		tsconfigOverrides,
 	);
-	await Deno.writeTextFile(
+	await writeFile(
 		join(outDir, "tsconfig.json"),
 		JSON.stringify(tsconfigJson, null, "\t"),
 	);
@@ -370,13 +427,13 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 
 	const declaredPeerDeps: Record<string, string> = Array.isArray(peerDependencies)
 		? Object.fromEntries(
-			peerDependencies.map((entry) => {
-				const at = entry.lastIndexOf("@");
-				return at > 0
-					? [entry.slice(0, at), entry.slice(at + 1)]
-					: [entry, "*"];
-			}),
-		)
+				peerDependencies.map((entry) => {
+					const at = entry.lastIndexOf("@");
+					return at > 0
+						? [entry.slice(0, at), entry.slice(at + 1)]
+						: [entry, "*"];
+				}),
+			)
 		: { ...peerDependencies };
 
 	const basePackageJson: Record<string, unknown> = {
@@ -398,10 +455,7 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 		basePackageJson.peerDependenciesMeta = peerDependenciesMeta;
 	}
 
-	const packageJson: Record<string, unknown> = deepMerge(
-		basePackageJson,
-		packageJsonOverrides,
-	);
+	const packageJson = deepMerge(basePackageJson, packageJsonOverrides);
 
 	if (repository) {
 		packageJson.repository = {
@@ -413,31 +467,45 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 		};
 	}
 
-	await Deno.writeTextFile(
+	await writeFile(
 		join(outDir, "package.json"),
 		JSON.stringify(packageJson, null, "\t"),
 	);
 
 	const runCommand = async (cmd: string, args: string[]): Promise<void> => {
-		log(
-			`%c--> Executing: %c${cmd} ${args.join(" ")}`,
-			"color: gray",
-			"color: green",
-		);
-		const result = await new Deno.Command(cmd, {
-			args,
-			cwd: outDir,
-			stdout: quiet ? "piped" : "inherit",
-			stderr: quiet ? "piped" : "inherit",
-		}).output();
-		if (!result.success) {
-			const decoder = new TextDecoder();
-			const tail = quiet
-				? `\n${decoder.decode(result.stdout)}\n${decoder.decode(result.stderr)}`
-				: "";
-			throw new Error(
-				`\`${cmd} ${args.join(" ")}\` failed (exit code ${result.code})${tail}`,
+		const command = `${cmd} ${args.join(" ")}`;
+		log(gray("--> Executing: ") + green(command));
+		// stdin is closed, as with `Deno.Command#output()` before: npx then installs
+		// what it needs without prompting
+		const { code, signal, stdout, stderr } = await new Promise<{
+			code: number | null;
+			signal: NodeJS.Signals | null;
+			stdout: string;
+			stderr: string;
+		}>((resolve, reject) => {
+			const child = spawn(cmd, args, {
+				cwd: outDir,
+				stdio: quiet
+					? ["ignore", "pipe", "pipe"]
+					: ["ignore", "inherit", "inherit"],
+			});
+			let stdout = "";
+			let stderr = "";
+			child.stdout?.setEncoding("utf8").on("data", (s: string) => {
+				stdout += s;
+			});
+			child.stderr?.setEncoding("utf8").on("data", (s: string) => {
+				stderr += s;
+			});
+			child.on("error", reject);
+			child.on("close", (code, signal) =>
+				resolve({ code, signal, stdout, stderr }),
 			);
+		});
+		if (code !== 0) {
+			const status = code === null ? `signal ${signal}` : `exit code ${code}`;
+			const tail = quiet ? `\n${stdout}\n${stderr}` : "";
+			throw new Error(`\`${command}\` failed (${status})${tail}`);
 		}
 	};
 
@@ -465,24 +533,16 @@ export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult
 	// pass non-TS assets (e.g. `.json`, `.css`, `.sql`) through to dist/ before
 	// the src tree is deleted — tsc does not emit non-TS files and users may
 	// import them from their TypeScript sources.
-	for await (const entry of walk(outDirSrc, { includeDirs: false })) {
-		if (
-			entry.path.endsWith(".ts") ||
-			entry.path.endsWith(".tsx") ||
-			entry.path.endsWith(".mts") ||
-			entry.path.endsWith(".cts")
-		) continue;
-		const rel = relative(outDirSrc, entry.path);
-		const dest = join(outDirDist, rel);
-		await ensureDir(dirname(dest));
-		await copy(entry.path, dest, { overwrite: true });
+	for (const path of await listFiles(outDirSrc)) {
+		if (isTs(path)) continue;
+		await copy(path, join(outDirDist, relative(outDirSrc, path)));
 	}
 
 	// cleanup
-	await Deno.remove(join(outDir, "tsconfig.json"));
-	await Deno.remove(outDirSrc, { recursive: true });
+	await rm(join(outDir, "tsconfig.json"));
+	await rm(outDirSrc, { recursive: true });
 
-	log("%cDone!", "color: green; font-weight: bold");
+	log(boldGreen("Done!"));
 
 	return { outDir, entryPoints, packageJson };
 }

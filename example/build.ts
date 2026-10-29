@@ -1,4 +1,4 @@
-import { npmBuild } from "../npm-build.ts";
+import { npmBuild } from "../src/npm-build.ts";
 
 await npmBuild({
 	name: "@example/my-package",

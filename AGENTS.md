@@ -1,341 +1,156 @@
-# AGENTS.md - @marianmeres/npmbuild
+# @marianmeres/npmbuild — Agent Guide
 
-> Machine-readable context document for AI agents and LLMs working with this codebase.
+## Quick Reference
 
-## Package Identity
+- **What**: build tool that turns a Deno-style TypeScript source tree (`.ts` import
+  specifiers, versions in `deno.json`) into an npm-publishable ESM package: copies
+  `src/`, rewrites `.ts` → `.js` specifiers, generates `tsconfig.json` + `package.json`,
+  runs `npx tsc`, passes non-TS assets through. One source file, zero runtime
+  dependencies.
+- **Stack**: TypeScript (erasable-only), Node LTS (`.node-version`), pnpm, `node:test`,
+  Biome.
+- **Install**: `pnpm install` | **Test**: `pnpm test` | **Check all**: `pnpm run ci` |
+  **Build**: `pnpm run build`
+- **Distribution**: one source, two registries. npm gets `dist/` (ESM + `.d.ts`); JSR
+  (`jsr.json`) gets `src/` as is, for the Deno consumers (most `@marianmeres/*`
+  `scripts/build-npm.ts`), who run the `node:*` code through Deno's Node compatibility.
 
-| Field | Value |
-|-------|-------|
-| Name | `@marianmeres/npmbuild` |
-| Version | `1.12.0` |
-| Runtime | Deno |
-| License | MIT |
-| Author | Marian Meres |
-| Registry | JSR (jsr:@marianmeres/npmbuild) |
-
-## Purpose
-
-A Deno TypeScript build tool that converts Deno projects into npm-publishable packages. It handles:
-
-- Import path rewriting (`.ts` → `.js`), including side-effect imports
-- TypeScript compilation with declaration file generation (via `npx tsc`)
-- `package.json` generation with auto `files` field
-- Optional npm/JSR dependency installation
-- Non-TS asset passthrough (`.json`, `.css`, …) from `src/` to `dist/`
-
-## File Structure
+## Project Structure
 
 ```
-@marianmeres/npmbuild/
-├── npm-build.ts         # Main source - single export file
-├── npm-build.test.ts    # Unit tests for import rewriting
-├── deno.json            # Deno configuration
-├── deno.lock            # Dependency lock
-├── README.md            # User documentation
-├── LICENSE              # MIT license
-├── AGENTS.md            # This file
-└── example/             # Working example
-    ├── build.ts         # Example build script
-    └── src/             # Example source files
+src/npm-build.ts            # Everything: npmBuild, versionizeDeps, rewriteTsImports + internal helpers
+tests/npm-build.test.ts     # Unit: rewriteTsImports, versionizeDeps
+tests/npm-build.e2e.test.ts # Real builds of fixture projects (tsc included), then imports the output
+tests/_build.ts             # Child-process fixture: runs npmBuild(JSON argv) in its cwd
+example/                    # Manual example (`cd example && node build.ts`; needs network)
+jsr.json                    # JSR name / exports / include; no version (set at publish)
+dist/                       # `tsc -p tsconfig.build.json` output; gitignored; all npm gets (+ API.md, AGENTS.md)
+tmp/                        # Scratch + e2e fixtures (tmp/e2e-*), gitignored
 ```
 
-## Main Export
+## Critical Conventions
 
-### Function Signature
+1. **Runtime policy.** Node at the keyboard and in production, npm as the registry. No
+   `Deno.*`, `Bun.*`, `jsr:` or `npm:` specifiers, no `@std/*` (on npm it would force
+   consumers onto the JSR registry). `node:*` imported explicitly
+   (`import process from "node:process"`). Deno is a _consumer_ runtime here (JSR), not a
+   dev runtime: `pnpm run test:deno` runs the e2e suite with the build on Deno before a
+   JSR publish. Nothing is built or tested for Bun.
+2. **Behaviour parity with the Deno-era 1.x.** The internal helpers replace `@std`
+   one-for-one; keep their semantics:
+   - `deepMerge` = `@std/collections` default: objects merge, **arrays concatenate**,
+     other values (incl. `undefined`) replace.
+   - `copy` = `cp(..., { recursive, force, verbatimSymlinks: true })`. Without
+     `verbatimSymlinks`, a relative symlink in `srcDir` would point back into the source
+     tree and the import rewrite would edit the user's source (an e2e test guards this).
+   - `listFiles` = `walk(..., { includeDirs: false })`: symlinks listed, not followed.
+   - `emptyDir` keeps the directory itself.
+   - Commands spawn with stdin closed (`Deno.Command#output()` did the same), so `npx`
+     never prompts.
+3. **No `chdir`.** Every command gets `cwd: outDir`; relative option paths resolve
+   against the process cwd.
+4. **Erasable TypeScript.** No `enum`, `namespace`, constructor parameter properties;
+   `import type` for types; explicit `.ts` import extensions. Node strips types and never
+   checks them: `pnpm run typecheck` is the only type gate. Every export keeps an
+   explicit type (JSR slow-types check).
+5. **Formatting**: Biome (tabs, 4 wide, 90 cols, double quotes; manifests 2 spaces).
+   `pnpm run format` before committing.
 
-```typescript
-export async function npmBuild(options: NpmBuildOptions): Promise<NpmBuildResult>
-```
+## Public API
 
-### Options Interface
+Exports from `src/npm-build.ts` (full reference: [API.md](API.md)):
 
-```typescript
-interface NpmBuildOptions {
-  // Required
-  name: string;                        // npm package name
-  version: string;                     // semver version
-
-  // Optional with defaults
-  srcDir?: string;                     // default: "src"
-  outDir?: string;                     // default: ".npm-dist"
-  author?: string;                     // default: "Marian Meres"
-  license?: string;                    // default: "MIT"
-  repository?: string;                 // GitHub format: "user/repo"
-  sourceFiles?: string[];              // explicit list (nested paths OK); defaults to walking srcDir
-  rootFiles?: string[];                // default: ["LICENSE", "README.md", "API.md", "AGENTS.md", "CLAUDE.md", "docs"]
-  dependencies?: string[] | Record<string, string>;  // see "Dependencies" below
-  peerDependencies?: string[] | Record<string, string>;  // see "Peer Dependencies" below
-  peerDependenciesMeta?: Record<string, unknown>;    // emitted verbatim (e.g. `{ "@scope/pkg": { optional: true } }`)
-  jsrDependencies?: string[];          // installed via `npx jsr add`
-  tsconfig?: Record<string, unknown>;  // tsconfig overrides (deep merged)
-  entryPoints?: string[];              // default: ["mod"] — must be non-empty
-  packageJsonOverrides?: Record<string, unknown>;    // deep merged with generated package.json
-  quiet?: boolean;                     // default: false — suppress decorative output
-  includeHidden?: boolean;             // default: false — include dotfiles from srcDir
-}
-```
-
-### Result Interface
-
-```typescript
-interface NpmBuildResult {
-  outDir: string;                              // directory containing the built package
-  entryPoints: string[];                       // entry point names (without extension)
-  packageJson: Record<string, unknown>;        // the generated package.json (pre-install)
-}
-```
+| Export                    | Kind      | Purpose                                                          |
+| ------------------------- | --------- | ---------------------------------------------------------------- |
+| `npmBuild(options)`       | Function  | Runs the build; returns `NpmBuildResult`                         |
+| `versionizeDeps(deps, d)` | Function  | `["pg"]` + `deno.json` imports → `["pg@^8"]`                     |
+| `rewriteTsImports(src)`   | Function  | `.ts` → `.js` in `from` / side-effect / dynamic import forms     |
+| `TS_IMPORT_REWRITE_REGEX` | Const     | The regex behind `rewriteTsImports`                              |
+| `NpmBuildOptions`         | Interface | `name`, `version` required; everything else defaulted            |
+| `NpmBuildResult`          | Interface | `{ outDir, entryPoints, packageJson }` (packageJson pre-install) |
 
 ## Build Pipeline
 
 ```
-1. Validate required options (name, version, entryPoints non-empty)
-2. Empty output directory
-3. Copy source files (srcDir → outDir/src, skip dotfiles unless includeHidden)
-4. Copy root files and directories (LICENSE, README.md, docs/, etc.)
-5. Rewrite imports (.ts → .js in all .ts/.tsx/.mts/.cts files)
-6. Generate tsconfig.json
-7. Generate package.json (with files[] auto-derived from dist + copied rootFiles)
-8. Install npm dependencies (if `dependencies` is string[])
-9. Install JSR dependencies (if any)
-10. Run `npx tsc -p tsconfig.json` (cwd set per-command, no Deno.chdir)
-11. Copy non-TS assets from outDir/src → outDir/dist
-12. Cleanup (remove src/, tsconfig.json)
-13. Return NpmBuildResult
+1. Validate name, version, non-empty entryPoints (throws before touching the disk)
+2. emptyDir(outDir)
+3. Copy srcDir → outDir/src (walk, dotfiles skipped unless includeHidden; or sourceFiles)
+4. Copy rootFiles (files or dirs); ENOENT → warning, not listed in package.json "files"
+5. Rewrite imports in outDir/src/**/*.{ts,tsx,mts,cts}
+6. Write tsconfig.json (defaults below, deep-merged with `tsconfig`)
+7. Write package.json (exports from entryPoints, files = dist + copied rootFiles,
+   deep-merged with packageJsonOverrides; repository/bugs from `repository`)
+8. npm install <dependencies>      (string[] form only)
+9. npm install --no-save <peers>   (string[] form only)
+10. npx jsr add <jsrDependencies>
+11. npx tsc -p tsconfig.json       (failure → Error with exit code; output captured if quiet)
+12. Copy non-TS files outDir/src → outDir/dist
+13. rm outDir/tsconfig.json and outDir/src
 ```
 
-## Import Rewriting
+Generated `tsconfig.json` defaults: `target`/`module` `esnext`, `moduleResolution`
+`bundler`, `strict: false`, `declaration: true`, `skipLibCheck: true`,
+`forceConsistentCasingInFileNames: true`, `rootDir: "src"`, `outDir: "dist"`,
+`include: ["src/**/*"]`.
 
-Handled via a single regex, exported as `TS_IMPORT_REWRITE_REGEX`. The high-level helper `rewriteTsImports(source: string): string` is also exported for unit testing.
+`versionizeDeps`: a dep counts as versioned when `dep.lastIndexOf("@") > 0`; the version
+is what follows the last `@` of a `jsr:` / `npm:` imports value; anything else passes
+through unchanged. Path form reads with `readFileSync` (cwd-relative).
 
-| Before | After |
-|--------|-------|
-| `from './module.ts'` | `from './module.js'` |
-| `import './side-effect.ts'` | `import './side-effect.js'` |
-| `export * from './module.ts'` | `export * from './module.js'` |
-| `import('./module.ts')` | `import('./module.js')` |
+Console output: ANSI colours unless `NO_COLOR` is set (non-empty); `quiet` silences it.
 
-Regex:
+## Testing
 
-```regex
-/(from\s+|import\s+|import\s*\(\s*)(['"])([^'"]+)\.ts(['"])/g
-```
+- `tests/npm-build.e2e.test.ts` builds fixtures in `tmp/e2e-*` (removed after the run).
+  They must live inside the repo: `npx tsc` walks up from `outDir` to find
+  `node_modules/.bin/tsc`, i.e. this repo's TypeScript; from the OS temp dir it would use
+  a global `tsc` or download one.
+- The build runs in a child process (`tests/_build.ts`, options as JSON argv) —
+  `BUILD_RUNTIME=deno` swaps Node for `deno run -A --no-lock`. JSON cannot carry
+  `undefined`, so that case runs in process.
+- Record-form dependencies only: the suite needs no network.
 
-Each match captures only the prefix + string literal; surrounding syntax (trailing `;`, `)`, newlines, etc.) is preserved untouched.
+## Before Making Changes
 
-**Known limitation:** regex-based rewriting will also transform `.ts` specifier strings inside comments or string literals. Acceptable trade-off for the simplicity of the approach.
+- [ ] Keep the parity rules above (they are what Deno consumers on `^1` rely on).
+- [ ] Add or extend a test; run `pnpm run ci`, and `pnpm run test:deno` when touching
+  file or process handling.
+- [ ] Public surface or behaviour changed? Update [API.md](API.md) and the README
+  "Notable Changes" in the same commit.
 
-## Dependencies
+## Commands
 
-Field accepts two shapes:
+| Task                   | Command                                                     |
+| ---------------------- | ----------------------------------------------------------- |
+| Install                | `pnpm install`                                              |
+| Tests (unit + e2e)     | `pnpm test`                                                 |
+| e2e with build on Deno | `pnpm run test:deno`                                        |
+| Type check             | `pnpm run typecheck`                                        |
+| Lint + format check    | `pnpm run lint`                                             |
+| Format                 | `pnpm run format`                                           |
+| Everything CI runs     | `pnpm run ci`                                               |
+| Build `dist/`          | `pnpm run build`                                            |
+| Release + publish      | `pnpm run rp` (patch) / `pnpm run rpm` (minor) — human only |
 
-| Shape | Behavior |
-|-------|----------|
-| `string[]` | Runs `npm install <dep>` in outDir. Caret range of installed version is pinned in `package.json`. Creates `node_modules/` in outDir. |
-| `Record<string, string>` | Declared verbatim in `package.json`. No install performed. No `node_modules/` created. |
+Release is a human action: `pnpm run release` bumps `package.json` (the manifest of
+record), commits, tags and pushes; `publish:all` then runs `pnpm publish` (`ci` + `build`
+via `prepublishOnly`) and `publish:jsr` (`test:deno`, then
+`deno publish --no-check --set-version "$npm_package_version"`). `--no-check` because
+Deno would type-check against this repo's Node `tsconfig.json` (no `console` without
+`dom`/Deno libs); `pnpm run typecheck` is the type gate. `jsr.json` carries no version.
 
-Precedence: with `string[]`, `npm install` overwrites any matching dep name set via `packageJsonOverrides.dependencies`.
+## Constraints
 
-## Peer Dependencies
+- `npm` / `npx` must be on `PATH`; entry points must exist as `src/{name}.ts`.
+- No bundling, minification or CommonJS; ESM only.
+- Regex import rewriting also touches `.ts` specifier strings in comments / string
+  literals (accepted trade-off).
 
-`peerDependencies` and `peerDependenciesMeta` are emitted verbatim — no install is performed.
+## Documentation Index
 
-| Field | Shape | Behavior |
-|-------|-------|----------|
-| `peerDependencies` | `string[]` | Entries in `name@version` form (typically from `versionizeDeps`). Installed locally with `npm install --no-save` so tsc can resolve their types during build; they do **not** appear in `dependencies`. Bare names without `@version` get `"*"` as the range. |
-| `peerDependencies` | `Record<string, string>` | Declared verbatim. No install performed. |
-| `peerDependenciesMeta` | `Record<string, unknown>` | Declared verbatim, e.g. `{ "@scope/pkg": { optional: true } }`. |
-
-Both fields are only emitted in `package.json` when non-empty.
-
-## Helper: `versionizeDeps`
-
-```typescript
-export function versionizeDeps(
-  deps: string[],
-  denoJsonOrPath: string | Record<string, unknown> = "../deno.json",
-): string[]
-```
-
-Appends versions to bare dependency names by reading `deno.json`'s `imports` map. Designed to compose with `npmBuild`'s `dependencies: string[]` form so consumers don't hand-sync versions between `deno.json` and the build script.
-
-The second argument accepts either a path (read and parsed at call time) or a pre-parsed `deno.json` object. Prefer the object form when the caller has already loaded `deno.json` (common: reading `name`/`version` for `npmBuild`), avoiding a redundant read + parse.
-
-| Input dep | `imports` entry | Output |
-|-----------|-----------------|--------|
-| `"@marianmeres/clog"` | `"jsr:@marianmeres/clog@^2"` | `"@marianmeres/clog@^2"` |
-| `"pg"` | `"npm:pg@^8.11.0"` | `"pg@^8.11.0"` |
-| `"@types/pg"` | `"npm:@types/pg@^8"` | `"@types/pg@^8"` |
-| `"pg@^4"` (already versioned) | any | `"pg@^4"` (passthrough) |
-| `"missing-pkg"` | not in imports | `"missing-pkg"` (passthrough) |
-| any | URL / `jsr:` or `npm:` without `@version` | passthrough |
-
-Detection of "already versioned": `dep.lastIndexOf("@") > 0` (treats scope `@` at index 0 as non-version).
-
-Version extraction: strips a leading `jsr:` or `npm:` prefix from the imports value, then takes the substring after the last `@` (if that index is `> 0`). Values without a recognized registry prefix are skipped.
-
-Errors: missing `deno.json` or invalid JSON propagates from the underlying `Deno.readTextFileSync` / `JSON.parse` call (path form only; the object form bypasses the file read).
-
-## Generated TypeScript Config
-
-```json
-{
-  "compilerOptions": {
-    "target": "esnext",
-    "module": "esnext",
-    "strict": false,
-    "declaration": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "rootDir": "src",
-    "outDir": "dist",
-    "moduleResolution": "bundler"
-  },
-  "include": ["src/**/*"]
-}
-```
-
-## Generated package.json
-
-Example with `entryPoints: ["mod", "utils"]`:
-
-```json
-{
-  "name": "<options.name>",
-  "version": "<options.version>",
-  "type": "module",
-  "main": "dist/mod.js",
-  "types": "dist/mod.d.ts",
-  "exports": {
-    ".":       { "types": "./dist/mod.d.ts",   "import": "./dist/mod.js" },
-    "./utils": { "types": "./dist/utils.d.ts", "import": "./dist/utils.js" }
-  },
-  "files": ["dist", "LICENSE", "README.md"],
-  "author": "<options.author>",
-  "license": "<options.license>",
-  "dependencies": {}
-}
-```
-
-`packageJsonOverrides` is deep-merged with the generated object. To remove an auto-added field, set it to `undefined` in overrides.
-
-## Dependencies (Tooling)
-
-### Deno Standard Library
-
-| Import | Purpose |
-|--------|---------|
-| `@std/assert` | Test assertions |
-| `@std/collections` | `deepMerge` |
-| `@std/fs` | `copy`, `emptyDir`, `ensureDir`, `walk` |
-| `@std/path` | `dirname`, `join`, `relative` |
-
-### External CLI Requirements
-
-- `npm` — for `npm install` (and as provider of `npx`)
-- `npx` — wraps `tsc` invocation; resolves project-local, global, or on-demand TypeScript
-
-## Usage Example
-
-```typescript
-import { npmBuild } from "jsr:@marianmeres/npmbuild";
-
-await npmBuild({
-  name: "@example/my-package",
-  version: "1.0.0",
-  repository: "example/my-package",
-  dependencies: ["lodash"],
-  entryPoints: ["mod", "utils"],
-  packageJsonOverrides: {
-    keywords: ["typescript", "utility"],
-  },
-});
-```
-
-## Output Structure
-
-After build, `.npm-dist/` contains:
-
-```
-.npm-dist/
-├── package.json
-├── LICENSE
-├── README.md
-├── docs/                # if rootFiles includes "docs"
-│   └── …
-├── node_modules/        # only when `dependencies` is string[] (excluded by npm publish)
-├── package-lock.json    # only when `dependencies` is string[]
-└── dist/
-    ├── mod.js
-    ├── mod.d.ts
-    ├── utils.js         # if entryPoints includes "utils"
-    ├── utils.d.ts
-    ├── data.json        # non-TS assets passed through from src/
-    └── …
-```
-
-## Coding Conventions
-
-| Convention | Value |
-|------------|-------|
-| Indentation | Tabs (width 4) |
-| Line width | 90 characters |
-| Module format | ESM |
-| File encoding | UTF-8 |
-| Line endings | LF |
-
-## Error Handling
-
-- Missing root files/directories: warning logged, build continues; missing entries are not added to `files`.
-- Missing required options (`name`, `version`) or empty `entryPoints`: throws early with a clear message.
-- npm install / jsr add / tsc failure: throws with exit code. Output streams to stdout/stderr in normal mode; captured and included in thrown error when `quiet: true`.
-- No `Deno.chdir`: per-command `cwd` option used instead, so concurrent async work in the host process is unaffected.
-
-## Key Implementation Details
-
-1. **Single file architecture**: all logic in `npm-build.ts` (~280 LOC)
-2. **Unit tests**: `npm-build.test.ts` covers import-rewrite edge cases
-3. **Fully async**: uses `walk`/`copy`/`ensureDir`/`readTextFile`/`writeTextFile` and `Deno.Command(...).output()`
-4. **Graceful degradation**: missing optional files/directories don't fail build
-5. **Non-TS asset passthrough**: JSON, CSS, SQL, SVG etc. in `src/` are copied to `dist/` after tsc
-6. **Dotfile filtering**: dotfiles in `src/` are skipped by default (opt-in via `includeHidden: true`)
-7. **Auto `files` field**: `package.json` `files` is derived from `dist` + copied `rootFiles`, limiting what `npm publish` includes
-8. **NO_COLOR aware**: strips `%c` console styles when `NO_COLOR` env var is set
-
-## Common Modification Points
-
-| Task | Location |
-|------|----------|
-| Change default options | `npm-build.ts` — destructuring defaults |
-| Add new root files/dirs | `npm-build.ts` — `rootFiles` default array |
-| Modify tsconfig | `npm-build.ts` — tsconfig object literal |
-| Change package.json template | `npm-build.ts` — packageJson object literal |
-| Adjust import regex | `npm-build.ts` — `TS_IMPORT_REWRITE_REGEX` + tests in `npm-build.test.ts` |
-
-## Publishing Workflow
-
-```bash
-# 1. Build npm package
-deno run -A build.ts
-
-# 2. Publish to npm
-cd .npm-dist && npm publish
-```
-
-## Constraints & Limitations
-
-- Entry points must exist in `src/` directory (e.g., `src/mod.ts`, `src/utils.ts`)
-- Requires `npm` / `npx` in PATH
-- No bundling (outputs individual files)
-- No tree-shaking or minification
-- Regex-based import rewriting may also transform `.ts` specifier strings inside comments or string literals (documented trade-off)
-
-## Breaking Changes (1.12.0)
-
-- Return type changed from `Promise<void>` to `Promise<NpmBuildResult>`. Calls that only `await` the result are unaffected.
-- `package.json` now includes a `files` field auto-derived from `dist` + copied `rootFiles`. Override via `packageJsonOverrides.files`.
-- Dotfiles in `srcDir` are no longer copied by default; opt-in via `includeHidden: true`.
-- `tsc` is now invoked via `npx tsc` (previously plain `tsc`). Transparent if `tsc` was already in PATH.
-- Non-TS files inside `srcDir` now pass through to `dist/` (previously silently dropped).
-- Empty `entryPoints: []` now throws instead of producing a broken `package.json`.
-- Side-effect imports (`import "./x.ts"`) are now correctly rewritten; previously they shipped broken.
-- `sourceFiles` entries with nested paths (e.g. `"utils/foo.ts"`) now work (previously crashed with `NotFound`).
+| Doc                    | Audience | Contents                                        |
+| ---------------------- | -------- | ----------------------------------------------- |
+| [README.md](README.md) | Human    | Overview, usage, recipes, notable changes       |
+| [API.md](API.md)       | Human    | Full reference: options, merging, deps, results |
+| [AGENTS.md](AGENTS.md) | Agent    | This file                                       |
+| [CLAUDE.md](CLAUDE.md) | Agent    | Pointer to this file                            |

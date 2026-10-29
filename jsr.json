@@ -1,0 +1,7 @@
+{
+  "name": "@marianmeres/npmbuild",
+  "exports": "./src/npm-build.ts",
+  "publish": {
+    "include": ["src/**/*.ts", "README.md", "API.md", "AGENTS.md", "LICENSE"]
+  }
+}
